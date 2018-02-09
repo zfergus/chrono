@@ -1,7 +1,7 @@
 # Miscellaneous tests with Chrono::Distributed
 # ------------------------------------------------------------------------------
 
-if(NOT ENABLE_MODULE_PARALLEL AND NOT ENABLE_MODULE_DISTRIBUTED)
+if(NOT ENABLE_MODULE_PARALLEL OR NOT ENABLE_MODULE_DISTRIBUTED)
   return()
 endif()  
 
