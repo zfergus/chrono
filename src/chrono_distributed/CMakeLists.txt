@@ -93,6 +93,7 @@ SET(ChronoEngine_distributed_COLLISION
 	collision/ChCollisionModelDistributed.cpp
 	collision/ChCollisionSystemDistributed.cpp
 	collision/ChAAPlaneCB.cpp
+	collision/ChPlaneCB.cpp
     )
 
 SOURCE_GROUP(collision FILES ${ChronoEngine_distributed_COLLISION})

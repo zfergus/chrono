@@ -11,6 +11,7 @@ endif()
 
 set(TESTS
     test_distributed_triangle
+    test_DISTR_geometry
 )
 
 # ------------------------------------------------------------------------------
