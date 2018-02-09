@@ -16,20 +16,20 @@
 // All units SI.
 // =============================================================================
 
+#include <cmath>
 #include <cstdio>
 #include <vector>
-#include <cmath>
 
 #include "chrono/ChConfig.h"
 #include "chrono/core/ChFileutils.h"
 #include "chrono/core/ChStream.h"
-#include "chrono/utils/ChUtilsGeometry.h"
 #include "chrono/utils/ChUtilsCreators.h"
+#include "chrono/utils/ChUtilsGeometry.h"
 #include "chrono/utils/ChUtilsInputOutput.h"
 
+#include "chrono_parallel/collision/ChNarrowphaseRUtils.h"
 #include "chrono_parallel/physics/ChSystemParallel.h"
 #include "chrono_parallel/solver/ChSystemDescriptorParallel.h"
-#include "chrono_parallel/collision/ChNarrowphaseRUtils.h"
 
 // Note: CHRONO_OPENGL is defined in ChConfig.h
 #ifdef CHRONO_OPENGL
@@ -88,7 +88,6 @@ int out_fps = 60;
 // Create ground body
 // =============================================================================
 void CreateGround(ChSystemParallel* system) {
-
 #ifdef USE_SMC
     auto mat_g = std::make_shared<ChMaterialSurfaceSMC>();
     mat_g->SetYoungModulus(1e7f);
@@ -162,12 +161,22 @@ void CreateObject(ChSystemParallel* system) {
 
     obj->GetCollisionModel()->ClearModel();
 
-    //// TODO: CHANGE THIS
     double radius = 0.3;
     rb = utils::CalcSphereBradius(radius);
     vol = utils::CalcSphereVolume(radius);
     J = utils::CalcSphereGyration(radius);
-    utils::AddSphereGeometry(obj.get(), radius);
+    // utils::AddSphereGeometry(obj.get(), radius);
+    ChVector<> A(-radius, -radius, 0);
+    ChVector<> B(radius, -radius, 0);
+    ChVector<> C(0, radius, 0);
+	ChVector<> triangle_pos = ChVector<>(0);
+    std::dynamic_pointer_cast<ChCollisionModelParallel>(obj->GetCollisionModel())->AddTriangle(A, B, C, triangle_pos);
+	
+	auto sphere = std::make_shared<ChSphereShape>();
+	sphere->GetSphereGeometry().rad = radius;
+	sphere->Pos = initPos;
+	sphere->Rot = initRot;
+	obj->GetAssets().push_back(sphere);
 
     obj->GetCollisionModel()->BuildModel();
 
