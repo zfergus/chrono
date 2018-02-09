@@ -9,6 +9,7 @@
 #-----------------------------------------------------------------------------
 
 option(BUILD_DEMOS "Build demo programs" ON)
+option(BUILD_TESTS "Build test programs" ON)
 
 #-----------------------------------------------------------------------------
 # Collect compiler flags required to build the Chrono libraries
@@ -343,6 +344,9 @@ if(BUILD_DEMOS)
 endif()
 if(BUILD_TESTING)
   add_subdirectory(unit_tests)
+endif()
+if(BUILD_TESTS)
+  add_subdirectory(tests)
 endif()
 
 #------------------------------------------------------------

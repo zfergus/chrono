@@ -1,0 +1,49 @@
+# Miscellaneous tests with Chrono::Distributed
+# ------------------------------------------------------------------------------
+
+if(NOT ENABLE_MODULE_PARALLEL AND NOT ENABLE_MODULE_DISTRIBUTED)
+  return()
+endif()  
+
+# ------------------------------------------------------------------------------
+# List of all tests
+# ------------------------------------------------------------------------------
+
+set(TESTS
+    test_distributed_triangle
+)
+
+# ------------------------------------------------------------------------------
+
+include_directories(${CH_PARALLEL_INCLUDES})
+include_directories(${CH_DISTRIBUTED_INCLUDES})
+
+set(COMPILER_FLAGS "${CH_CXX_FLAGS} ${CH_DISTRIBUTED_CXX_FLAGS}")
+
+set(LINKER_FLAGS "${CH_LINKERFLAG_EXE} ${CH_DISTRIBUTED_LINK_FLAGS}")
+
+set(LIBRARIES
+    ChronoEngine
+    ChronoEngine_parallel
+    ChronoEngine_distributed
+)
+
+
+# ------------------------------------------------------------------------------
+# Add all executables
+# ------------------------------------------------------------------------------
+
+message(STATUS "Test programs for DISTRIBUTED module...")
+
+foreach(PROGRAM ${TESTS})
+    message(STATUS "...add ${PROGRAM}")
+
+    add_executable(${PROGRAM}  "${PROGRAM}.cpp")
+    source_group(""  FILES "${PROGRAM}.cpp")
+
+    set_target_properties(${PROGRAM} PROPERTIES
+        COMPILE_FLAGS "${COMPILER_FLAGS}"
+        LINK_FLAGS "${LINKER_FLAGS}")
+
+    target_link_libraries(${PROGRAM} ${LIBRARIES})
+endforeach()
