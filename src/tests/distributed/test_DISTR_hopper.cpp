@@ -9,8 +9,8 @@
 #include <memory>
 #include <vector>
 
-#include "chrono_distributed/collision/ChAAPlaneCB.cpp"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
+#include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "chrono/utils/ChUtilsCreators.h"
@@ -30,33 +30,23 @@ using namespace chrono::collision;
 #define MASTER 0
 
 // ID values to identify command line arguments
-enum { OPT_HELP, OPT_THREADS, OPT_X, OPT_Y, OPT_Z, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE };
+enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE };
 
 // Table of CSimpleOpt::Soption structures. Each entry specifies:
 // - the ID for the option (returned from OptionId() during processing)
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},
-                                    {OPT_HELP, "-h", SO_NONE},
-                                    {OPT_THREADS, "-n", SO_REQ_CMB},
-                                    {OPT_X, "-x", SO_REQ_CMB},
-                                    {OPT_Y, "-y", SO_REQ_CMB},
-                                    {OPT_Z, "-z", SO_REQ_CMB},
-                                    {OPT_TIME, "-t", SO_REQ_CMB},
-                                    {OPT_MONITOR, "-m", SO_NONE},
-                                    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},
-                                    SO_END_OF_OPTIONS};
+CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
+                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_TIME, "-t", SO_REQ_CMB},
+                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
+                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
                      int rank,
                      int& num_threads,
                      double& time_end,
-                     double& h_x,
-                     double& h_y,
-                     double& h_z,
                      bool& monitor,
                      bool& verbose,
                      bool& output_data,
@@ -69,18 +59,19 @@ float Y = 2e6f;
 float mu = 0.4f;
 float cr = 0.05f;
 double gran_radius = 0.0025;  // 1.25mm radius
-double sphere_radius = gran_radius * 2.0 / 3.0;
 double rho = 4000;
+double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
+              gran_radius;  // TODO shape dependent: more complicated than you'd think...
+ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
 
-// Dimensions
-double lowest_layer = 2 * spacing;  // Lowest possible CENTER of body
-int extra_container_layers = 3;
-
-// Oscillation
-double period = 0.5;                 // TODO adjust
-double amplitude = gran_radius * 5;  // TODO adjust
-double lower_start;
+// Dimensions TODO
+double hy = 0.1;                     // Half y dimension
+double height = 0.2;                 // Height of the box
+double slope_angle = CH_C_PI / 3.0;  // Angle of sloped wall from the horizontal
+double opening_width = 0.05;         // Width of opening of the hopper
+int split_axis = 1;                  // Split domain along y axis
+double dx;                           // x width of slope
 
 // Simulation
 double time_step = 7e-5;
@@ -124,16 +115,12 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
+// TODO, something funny going on here
 void AddContainer(ChSystemDistributed* sys,
-                  double h_x,
-                  double h_y,
-                  double height,
-                  ChAAPlaneCB** bottom_wall,
-                  ChAAPlaneCB** top_wall,
-                  ChAAPlaneCB** low_x_wall,
-                  ChAAPlaneCB** high_x_wall,
-                  ChAAPlaneCB** low_y_wall,
-                  ChAAPlaneCB** high_y_wall) {
+                  ChPlaneCB** low_x_wall,
+                  ChPlaneCB** high_x_wall,
+                  ChPlaneCB** low_y_wall,
+                  ChPlaneCB** high_y_wall) {
     // TODO Any of this body stuff needed for custom collision?
     int binId = -200;
 
@@ -150,22 +137,28 @@ void AddContainer(ChSystemDistributed* sys,
     container->SetBodyFixed(true);
     container->GetCollisionModel()->ClearModel();
 
-    lower_start = -h_x - gran_radius;
-    // TODO little extra space on sides
-    *bottom_wall =
-        new ChAAPlaneCB(sys, container.get(), 2, 0, ChVector<>(0, 0, 1), -2 * h_x, 2 * h_x, -2 * h_y, 2 * h_y);
-    *top_wall = new ChAAPlaneCB(sys, container.get(), 2, 1.25 * height, ChVector<>(0, 0, -1), -2 * h_x, 2 * h_x,
-                                -2 * h_y, 2 * h_y);
-    *low_x_wall = new ChAAPlaneCB(sys, container.get(), 0, lower_start, ChVector<>(1, 0, 0), -2 * h_y, 2 * h_y, -height,
-                                  2 * height);
-    *high_x_wall =
-        new ChAAPlaneCB(sys, container.get(), 0, h_x, ChVector<>(-1, 0, 0), -2 * h_y, 2 * h_y, -height, 2 * height);
-    *low_y_wall = new ChAAPlaneCB(sys, container.get(), 1, -h_y - gran_radius, ChVector<>(0, 1, 0), -2 * h_x, 2 * h_x,
-                                  -height, 2 * height);
-    *high_y_wall =
-        new ChAAPlaneCB(sys, container.get(), 1, h_y, ChVector<>(0, -1, 0), -2 * h_x, 2 * h_x, -height, 2 * height);
+    ChPlaneCB *bottom_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, 0), ChVector<>(1, 0, 0), ChVector<>(0, 1, 0),
+                          ChVector<>(0, 0, 1));
+    // Veritcal wall
+    *low_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, height / 2.0), ChVector<>(0, hy, 0),
+                                ChVector<>(0, 0, height / 2.0), ChVector<>(1, 0, 0));
 
-    sys->RegisterCustomCollisionCallback(*bottom_wall);
+    ChVector<> center(opening_width + height / (2.0 * std::tan(slope_angle)), 0, height / 2.0);
+    ChVector<> u(0, hy, 0);
+    ChVector<> w(dx / 2.0, 0, height / 2.0);
+
+    // Sloped wall
+    *high_x_wall = new ChPlaneCB(sys, container.get(), center, u, w, w.Cross(u));
+
+    // Parallel vertical walls
+    *low_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>((opening_width + dx) / 2.0, -hy, height / 2.0),
+                                ChVector<>((opening_width + dx) / 2.0, 0, 0), ChVector<>(0, 0, height / 2.0),
+                                ChVector<>(0, 1, 0));
+    *high_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>((opening_width + dx) / 2.0, hy, height / 2.0),
+                                 ChVector<>((opening_width + dx) / 2.0, 0, 0), ChVector<>(0, 0, height / 2.0),
+                                 ChVector<>(0, -1, 0));
+
+    sys->RegisterCustomCollisionCallback(bottom_wall);
     sys->RegisterCustomCollisionCallback(*low_x_wall);
     sys->RegisterCustomCollisionCallback(*high_x_wall);
     sys->RegisterCustomCollisionCallback(*low_y_wall);
@@ -193,14 +186,16 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
     ball->SetCollide(true);
 
     ball->GetCollisionModel()->ClearModel();
-    utils::AddBiSphereGeometry(ball.get(), radius, radius);  // TODO
+    utils::AddSphereGeometry(ball.get(), radius);
     ball->GetCollisionModel()->BuildModel();
     return ball;
 }
 
-size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double gran_height) {
-    ChVector<double> box_center(0, 0, lowest_layer + gran_height / 2);
-    ChVector<double> half_dims(h_x - spacing, h_y - spacing, gran_height / 2.0);
+size_t AddFallingBalls(ChSystemDistributed* sys) {
+    // TODO define dx
+    ChVector<double> box_center((2.0 * opening_width + dx) / 4.0, 0, 3.0 / 4.0 * height);
+    ChVector<double> half_dims(((opening_width + dx / 2.0) - 3 * gran_radius) / 2.0, (2.0 * hy - 3 * gran_radius) / 2.0,
+                               (height / 2.0 - 3 * gran_radius));
 
     utils::GridSampler<> sampler(spacing);
     // utils::HCPSampler<> sampler(gran_radius * 2.0);
@@ -215,22 +210,15 @@ size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double 
 
     // Create the falling balls
     int ballId = 0;
-    double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
-    ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
     for (int i = 0; i < points.size(); i++) {
         if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, sphere_radius);
+            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
             sys->AddBody(ball);
         }
         sys->IncrementGID();
     }
 
     return points.size();
-}
-
-// TODO need to expand domain decomp
-double GetLowerWallPos(double cur_time) {
-    return amplitude * std::sin(cur_time * 2 * CH_C_PI / period) + lower_start;
 }
 
 int main(int argc, char* argv[]) {
@@ -243,18 +231,16 @@ int main(int argc, char* argv[]) {
     // Parse program arguments
     int num_threads;
     double time_end;
-    double h_x;
-    double h_y;
-    double h_z;
     std::string outdir;
     bool verbose;
     bool monitor;
     bool output_data;
-    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, h_x, h_y, h_z, monitor, verbose, output_data,
-                         outdir)) {
+    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, monitor, verbose, output_data, outdir)) {
         MPI_Finalize();
         return 1;
     }
+
+    double dx = height / std::tan(slope_angle);
 
     // if (my_rank == 0) {
     // 	int foo;
@@ -289,7 +275,7 @@ int main(int argc, char* argv[]) {
 
     if (verbose && my_rank == MASTER) {
         std::cout << "Number of threads:          " << num_threads << std::endl;
-        std::cout << "Domain:                     " << 2 * h_x << " x " << 2 * h_y << " x " << 2 * h_z << std::endl;
+        // std::cout << "Domain:                     " << 2 * h_x << " x " << 2 * h_y << " x " << 2 * h_z << std::endl;
         std::cout << "Simulation length:          " << time_end << std::endl;
         std::cout << "Monitor?                    " << monitor << std::endl;
         std::cout << "Output?                     " << output_data << std::endl;
@@ -297,24 +283,22 @@ int main(int argc, char* argv[]) {
             std::cout << "Output directory:           " << outdir << std::endl;
     }
 
+    // TODO
     // Simple Cubic packing density computations:
-    double open_X = 2 * h_x;
-    double open_Y = 2 * h_y;
-    double open_Z = 2 * h_z;
-    int count_X = (int)(open_X / spacing);
-    int count_Y = (int)(open_Y / spacing);
-    int count_Z = (int)(open_Z / spacing);
-    int balls_per_layer = count_X * count_Y;
-    double gran_height = count_Z * spacing;
+    // double open_X = 2 * hx;
+    // double open_Y = 2 * hy;
+    // double open_Z = 2 * hz;
+    // int count_X = (int)(open_X / spacing);
+    // int count_Y = (int)(open_Y / spacing);
+    // int count_Z = (int)(open_Z / spacing);
+    // int balls_per_layer = count_X * count_Y;
 
     // Hexagonal Close packing
     // double volume_needed = (4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius * num_bodies) / 0.74;
     // double gran_height = volume_needed / (h_x * h_y * 4);
 
-    double height = lowest_layer + gran_height + extra_container_layers * spacing;
-
     // Create distributed system
-    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2, balls_per_layer * count_Z);  // TODO
+    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2, 10000);  // TODO
 
     if (verbose) {
         if (my_rank == MASTER)
@@ -325,12 +309,12 @@ int main(int argc, char* argv[]) {
     my_sys.SetParallelThreadNumber(num_threads);
     CHOMPfunctions::SetNumThreads(num_threads);
 
-    my_sys.Set_G_acc(ChVector<double>(0.00001, 0.00001, -9.8));
+    my_sys.Set_G_acc(ChVector<double>(9, 0, 0));
 
-    // Domain decomposition
-    ChVector<double> domlo(-h_x - amplitude, -h_y, -0.0001);
-    ChVector<double> domhi(h_x + amplitude, h_y, height + 0.0001);
-    my_sys.GetDomain()->SetSplitAxis(1);  // Split along the y-axis
+    // Domain decomposition // TODO
+    ChVector<double> domlo(0, -hy, -10);
+    ChVector<double> domhi(opening_width + dx, hy, height + gran_radius);
+    my_sys.GetDomain()->SetSplitAxis(split_axis);
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
 
     if (verbose)
@@ -343,11 +327,11 @@ int main(int argc, char* argv[]) {
     my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
     my_sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
-    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
+    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_R;
 
     int binX;
     int binY;
-    int binZ = 1;
+    int binZ = 1;  // TODO
     int factor = 2;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
@@ -365,16 +349,13 @@ int main(int argc, char* argv[]) {
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
     // Create objects
-    ChAAPlaneCB* bottom_wall;
-    ChAAPlaneCB* top_wall;
-    ChAAPlaneCB* low_x_wall;
-    ChAAPlaneCB* high_x_wall;
-    ChAAPlaneCB* low_y_wall;
-    ChAAPlaneCB* high_y_wall;
+    ChPlaneCB* low_x_wall;
+    ChPlaneCB* high_x_wall;
+    ChPlaneCB* low_y_wall;
+    ChPlaneCB* high_y_wall;
 
-    AddContainer(&my_sys, h_x, h_y, height, &bottom_wall, &top_wall, &low_x_wall, &high_x_wall, &low_y_wall,
-                 &high_y_wall);
-    auto actual_num_bodies = AddFallingBalls(&my_sys, h_x, h_y, gran_height);
+    AddContainer(&my_sys, &low_x_wall, &high_x_wall, &low_y_wall, &high_y_wall);
+    auto actual_num_bodies = AddFallingBalls(&my_sys);
     MPI_Barrier(my_sys.GetMPIWorld());
     if (my_rank == MASTER)
         std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
@@ -409,9 +390,6 @@ int main(int argc, char* argv[]) {
                 out_frame++;
             }
         }
-        double lower_wall_pos = GetLowerWallPos(time);
-        low_x_wall->SetPos(lower_wall_pos);
-        high_x_wall->SetPos(lower_wall_pos + 2 * h_x);
 
         // my_sys.SanityCheck();
         if (monitor)
@@ -434,9 +412,6 @@ bool GetProblemSpecs(int argc,
                      int rank,
                      int& num_threads,
                      double& time_end,
-                     double& h_x,
-                     double& h_y,
-                     double& h_z,
                      bool& monitor,
                      bool& verbose,
                      bool& output_data,
@@ -444,9 +419,6 @@ bool GetProblemSpecs(int argc,
     // Initialize parameters.
     num_threads = -1;
     time_end = -1;
-    h_x = -1;
-    h_y = -1;
-    h_z = -1;
     verbose = false;
     monitor = false;
     output_data = false;
@@ -481,18 +453,6 @@ bool GetProblemSpecs(int argc,
                 outdir = args.OptionArg();
                 break;
 
-            case OPT_X:
-                h_x = std::stod(args.OptionArg()) / 2.0;
-                break;
-
-            case OPT_Y:
-                h_y = std::stod(args.OptionArg()) / 2.0;
-                break;
-
-            case OPT_Z:
-                h_z = std::stod(args.OptionArg()) / 2.0;
-                break;
-
             case OPT_TIME:
                 time_end = std::stod(args.OptionArg());
                 break;
@@ -508,7 +468,7 @@ bool GetProblemSpecs(int argc,
     }
 
     // Check that required parameters were specified
-    if (num_threads == -1 || time_end <= 0 || h_x < 0 || h_y < 0 || h_z < 0) {
+    if (num_threads == -1 || time_end <= 0) {
         if (rank == MASTER) {
             std::cout << "Invalid parameter or missing required parameter." << std::endl;
             ShowUsage();
@@ -522,9 +482,6 @@ bool GetProblemSpecs(int argc,
 void ShowUsage() {
     std::cout << "Usage: mpirun -np <num_ranks> ./demo_DISTR_scaling [ARGS]" << std::endl;
     std::cout << "-n=<nthreads>   Number of OpenMP threads on each rank [REQUIRED]" << std::endl;
-    std::cout << "-x=<xsize>      Patch dimension in X direction [REQUIRED]" << std::endl;
-    std::cout << "-y=<ysize>      Patch dimension in Y direction [REQUIRED]" << std::endl;
-    std::cout << "-z=<zsize>      Patch dimension in Z direction [REQUIRED]" << std::endl;
     std::cout << "-t=<end_time>   Simulation length [REQUIRED]" << std::endl;
     std::cout << "-o=<outdir>     Output directory (must not exist)" << std::endl;
     std::cout << "-m              Enable performance monitoring (default: false)" << std::endl;

@@ -22,6 +22,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <climits>
 
 #include "chrono/collision/ChCCollisionSystem.h"
 #include "chrono/physics/ChBody.h"

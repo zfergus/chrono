@@ -9,8 +9,8 @@
 #include <memory>
 #include <vector>
 
-#include "chrono_distributed/collision/ChAAPlaneCB.cpp"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
+#include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "chrono/utils/ChUtilsCreators.h"
@@ -68,8 +68,7 @@ void ShowUsage();
 float Y = 2e6f;
 float mu = 0.4f;
 float cr = 0.05f;
-double gran_radius = 0.0025;  // 1.25mm radius
-double sphere_radius = gran_radius * 2.0 / 3.0;
+double gran_radius = 0.00125;  // 1.25mm radius
 double rho = 4000;
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
 
@@ -128,12 +127,12 @@ void AddContainer(ChSystemDistributed* sys,
                   double h_x,
                   double h_y,
                   double height,
-                  ChAAPlaneCB** bottom_wall,
-                  ChAAPlaneCB** top_wall,
-                  ChAAPlaneCB** low_x_wall,
-                  ChAAPlaneCB** high_x_wall,
-                  ChAAPlaneCB** low_y_wall,
-                  ChAAPlaneCB** high_y_wall) {
+                  ChPlaneCB** bottom_wall,
+                  ChPlaneCB** top_wall,
+                  ChPlaneCB** low_x_wall,
+                  ChPlaneCB** high_x_wall,
+                  ChPlaneCB** low_y_wall,
+                  ChPlaneCB** high_y_wall) {
     // TODO Any of this body stuff needed for custom collision?
     int binId = -200;
 
@@ -151,19 +150,21 @@ void AddContainer(ChSystemDistributed* sys,
     container->GetCollisionModel()->ClearModel();
 
     lower_start = -h_x - gran_radius;
-    // TODO little extra space on sides
-    *bottom_wall =
-        new ChAAPlaneCB(sys, container.get(), 2, 0, ChVector<>(0, 0, 1), -2 * h_x, 2 * h_x, -2 * h_y, 2 * h_y);
-    *top_wall = new ChAAPlaneCB(sys, container.get(), 2, 1.25 * height, ChVector<>(0, 0, -1), -2 * h_x, 2 * h_x,
-                                -2 * h_y, 2 * h_y);
-    *low_x_wall = new ChAAPlaneCB(sys, container.get(), 0, lower_start, ChVector<>(1, 0, 0), -2 * h_y, 2 * h_y, -height,
-                                  2 * height);
-    *high_x_wall =
-        new ChAAPlaneCB(sys, container.get(), 0, h_x, ChVector<>(-1, 0, 0), -2 * h_y, 2 * h_y, -height, 2 * height);
-    *low_y_wall = new ChAAPlaneCB(sys, container.get(), 1, -h_y - gran_radius, ChVector<>(0, 1, 0), -2 * h_x, 2 * h_x,
-                                  -height, 2 * height);
-    *high_y_wall =
-        new ChAAPlaneCB(sys, container.get(), 1, h_y, ChVector<>(0, -1, 0), -2 * h_x, 2 * h_x, -height, 2 * height);
+
+    *bottom_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0), ChVector<>(1, 0, 0) * 2.0,
+                                 ChVector<>(0, 1, 0) * 2.0, ChVector<>(0, 0, 1));
+
+    *low_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(-h_x, 0, height / 2.0), ChVector<>(0, h_y, 0) * 2.0,
+                                ChVector<>(0, 0, height / 2.0) * 2.0, ChVector<>(1, 0, 0));
+
+    *high_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(h_x, 0, height / 2.0), ChVector<>(0, h_y, 0) * 2.0,
+                                 ChVector<>(0, 0, height / 2.0) * 2.0, ChVector<>(-1, 0, 0));
+
+    *low_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, -h_y, height / 2.0), ChVector<>(h_x, 0, 0) * 2.0,
+                                ChVector<>(0, 0, height / 2.0) * 2.0, ChVector<>(0, 1, 0));
+
+    *high_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, h_y, height / 2.0), ChVector<>(h_x, 0, 0) * 2.0,
+                                 ChVector<>(0, 0, height / 2.0) * 2.0, ChVector<>(0, -1, 0));
 
     sys->RegisterCustomCollisionCallback(*bottom_wall);
     sys->RegisterCustomCollisionCallback(*low_x_wall);
@@ -193,14 +194,14 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
     ball->SetCollide(true);
 
     ball->GetCollisionModel()->ClearModel();
-    utils::AddBiSphereGeometry(ball.get(), radius, radius);  // TODO
+    utils::AddSphereGeometry(ball.get(), radius);
     ball->GetCollisionModel()->BuildModel();
     return ball;
 }
 
 size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double gran_height) {
     ChVector<double> box_center(0, 0, lowest_layer + gran_height / 2);
-    ChVector<double> half_dims(h_x - spacing, h_y - spacing, gran_height / 2.0);
+    ChVector<double> half_dims(h_x - spacing / 2.0, h_y - spacing / 2.0, gran_height / 2.0001);
 
     utils::GridSampler<> sampler(spacing);
     // utils::HCPSampler<> sampler(gran_radius * 2.0);
@@ -215,11 +216,11 @@ size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double 
 
     // Create the falling balls
     int ballId = 0;
-    double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
+    double mass = rho * 4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius;
     ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
     for (int i = 0; i < points.size(); i++) {
         if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, sphere_radius);
+            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
             sys->AddBody(ball);
         }
         sys->IncrementGID();
@@ -343,12 +344,12 @@ int main(int argc, char* argv[]) {
     my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
     my_sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
-    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
+    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_R;
 
     int binX;
     int binY;
     int binZ = 1;
-    int factor = 2;
+    int factor = 4;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
     ChVector<> subsize = (subhi - sublo) / (2 * gran_radius);
@@ -365,12 +366,12 @@ int main(int argc, char* argv[]) {
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
     // Create objects
-    ChAAPlaneCB* bottom_wall;
-    ChAAPlaneCB* top_wall;
-    ChAAPlaneCB* low_x_wall;
-    ChAAPlaneCB* high_x_wall;
-    ChAAPlaneCB* low_y_wall;
-    ChAAPlaneCB* high_y_wall;
+    ChPlaneCB* bottom_wall;
+    ChPlaneCB* top_wall;
+    ChPlaneCB* low_x_wall;
+    ChPlaneCB* high_x_wall;
+    ChPlaneCB* low_y_wall;
+    ChPlaneCB* high_y_wall;
 
     AddContainer(&my_sys, h_x, h_y, height, &bottom_wall, &top_wall, &low_x_wall, &high_x_wall, &low_y_wall,
                  &high_y_wall);
@@ -410,8 +411,8 @@ int main(int argc, char* argv[]) {
             }
         }
         double lower_wall_pos = GetLowerWallPos(time);
-        low_x_wall->SetPos(lower_wall_pos);
-        high_x_wall->SetPos(lower_wall_pos + 2 * h_x);
+        low_x_wall->SetPos(ChVector<>(lower_wall_pos, 0, height / 2.0));
+        high_x_wall->SetPos(ChVector<>(lower_wall_pos + 2 * h_x, 0, height / 2.0));
 
         // my_sys.SanityCheck();
         if (monitor)

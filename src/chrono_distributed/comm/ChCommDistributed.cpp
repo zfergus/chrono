@@ -17,6 +17,7 @@
 #include <forward_list>
 #include <memory>
 #include <string>
+#include <climits>
 
 #include "chrono_distributed/ChDistributedDataManager.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"

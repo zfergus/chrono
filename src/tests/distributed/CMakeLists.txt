@@ -3,7 +3,7 @@
 
 if(NOT ENABLE_MODULE_PARALLEL OR NOT ENABLE_MODULE_DISTRIBUTED)
   return()
-endif()  
+endif()
 
 # ------------------------------------------------------------------------------
 # List of all tests
@@ -12,6 +12,8 @@ endif()
 set(TESTS
     test_distributed_triangle
     test_DISTR_geometry
+    test_DISTR_hopper
+    test_DISTR_plane
 )
 
 # ------------------------------------------------------------------------------
