@@ -58,7 +58,7 @@ void ShowUsage();
 float Y = 2e6f;
 float mu = 0.4f;
 float cr = 0.05f;
-double gran_radius = 0.0025;  // 1.25mm radius
+double gran_radius = 0.0025;  // 2.5mm radius
 double rho = 4000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
               gran_radius;  // TODO shape dependent: more complicated than you'd think...
@@ -66,15 +66,15 @@ ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
 
 // Dimensions TODO
-double hy = 0.1;                     // Half y dimension
-double height = 0.2;                 // Height of the box
-double slope_angle = CH_C_PI / 3.0;  // Angle of sloped wall from the horizontal
-double opening_width = 0.05;         // Width of opening of the hopper
+double hy = 0.02;                    // Half y dimension
+double height = 0.25;                // Height of the box
+double slope_angle = CH_C_PI / 6.0;  // Angle of sloped wall from the horizontal
+double gap = 0.0;                    // Width of opening of the hopper
 int split_axis = 1;                  // Split domain along y axis
 double dx;                           // x width of slope
 
 // Simulation
-double time_step = 7e-5;
+double time_step = 5e-6;
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
@@ -115,7 +115,7 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
-// TODO, something funny going on here
+// TODO something funny going on here
 void AddContainer(ChSystemDistributed* sys,
                   ChPlaneCB** low_x_wall,
                   ChPlaneCB** high_x_wall,
@@ -137,28 +137,29 @@ void AddContainer(ChSystemDistributed* sys,
     container->SetBodyFixed(true);
     container->GetCollisionModel()->ClearModel();
 
-    ChPlaneCB *bottom_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, 0), ChVector<>(1, 0, 0), ChVector<>(0, 1, 0),
-                          ChVector<>(0, 0, 1));
+    // ChPlaneCB* bottom_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, 0), ChVector<>(1, 0, 0),
+    // ChVector<>(0, 1, 0), ChVector<>(0, 0, 1));
     // Veritcal wall
-    *low_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, height / 2.0), ChVector<>(0, hy, 0),
-                                ChVector<>(0, 0, height / 2.0), ChVector<>(1, 0, 0));
+    *low_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, height / 2.0), ChVector<>(0, 0, height / 2.0),
+                                ChVector<>(0, hy, 0), ChVector<>(1, 0, 0));
 
-    ChVector<> center(opening_width + height / (2.0 * std::tan(slope_angle)), 0, height / 2.0);
-    ChVector<> u(0, hy, 0);
-    ChVector<> w(dx / 2.0, 0, height / 2.0);
+    ChVector<double> center(gap + dx / 2.0, 0, height / 2.0);
+    ChVector<double> u(dx / 2.0, 0, height / 2.0);
+    ChVector<double> w(0, hy, 0);
+    ChVector<double> n = u.Cross(w);
 
     // Sloped wall
-    *high_x_wall = new ChPlaneCB(sys, container.get(), center, u, w, w.Cross(u));
+    *high_x_wall = new ChPlaneCB(sys, container.get(), center, u, w, n);
 
     // Parallel vertical walls
-    *low_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>((opening_width + dx) / 2.0, -hy, height / 2.0),
-                                ChVector<>((opening_width + dx) / 2.0, 0, 0), ChVector<>(0, 0, height / 2.0),
-                                ChVector<>(0, 1, 0));
-    *high_y_wall = new ChPlaneCB(sys, container.get(), ChVector<>((opening_width + dx) / 2.0, hy, height / 2.0),
-                                 ChVector<>((opening_width + dx) / 2.0, 0, 0), ChVector<>(0, 0, height / 2.0),
-                                 ChVector<>(0, -1, 0));
+    *low_y_wall = new ChPlaneCB(sys, container.get(), ChVector<double>((gap + dx) / 2.0, -hy, height / 2.0),
+                                ChVector<double>((gap + dx) / 2.0, 0, 0), ChVector<double>(0, 0, height / 2.0),
+                                ChVector<double>(0, 1, 0));
+    *high_y_wall = new ChPlaneCB(sys, container.get(), ChVector<double>((gap + dx) / 2.0, hy, height / 2.0),
+                                 ChVector<double>((gap + dx) / 2.0, 0, 0), ChVector<double>(0, 0, height / 2.0),
+                                 ChVector<double>(0, -1, 0));
 
-    sys->RegisterCustomCollisionCallback(bottom_wall);
+    // sys->RegisterCustomCollisionCallback(bottom_wall);
     sys->RegisterCustomCollisionCallback(*low_x_wall);
     sys->RegisterCustomCollisionCallback(*high_x_wall);
     sys->RegisterCustomCollisionCallback(*low_y_wall);
@@ -192,10 +193,11 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
 }
 
 size_t AddFallingBalls(ChSystemDistributed* sys) {
-    // TODO define dx
-    ChVector<double> box_center((2.0 * opening_width + dx) / 4.0, 0, 3.0 / 4.0 * height);
-    ChVector<double> half_dims(((opening_width + dx / 2.0) - 3 * gran_radius) / 2.0, (2.0 * hy - 3 * gran_radius) / 2.0,
-                               (height / 2.0 - 3 * gran_radius));
+    ChVector<double> box_center((gap + dx / 2.0) / 2.0, 0, 3.0 * height / 4.0);
+
+    ChVector<double> h_dims((gap + dx / 2.0) / 2.0, hy, height / 4.0);
+    ChVector<double> padding = 2.0 * gran_radius * ChVector<double>(1, 1, 1);
+    ChVector<double> half_dims = h_dims - padding;
 
     utils::GridSampler<> sampler(spacing);
     // utils::HCPSampler<> sampler(gran_radius * 2.0);
@@ -240,7 +242,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    double dx = height / std::tan(slope_angle);
+    dx = height / std::tan(slope_angle);
 
     // if (my_rank == 0) {
     // 	int foo;
@@ -309,11 +311,11 @@ int main(int argc, char* argv[]) {
     my_sys.SetParallelThreadNumber(num_threads);
     CHOMPfunctions::SetNumThreads(num_threads);
 
-    my_sys.Set_G_acc(ChVector<double>(9, 0, 0));
+    my_sys.Set_G_acc(ChVector<double>(0, 0, -9.8));
 
     // Domain decomposition // TODO
     ChVector<double> domlo(0, -hy, -10);
-    ChVector<double> domhi(opening_width + dx, hy, height + gran_radius);
+    ChVector<double> domhi(gap + dx, hy, height + gran_radius);
     my_sys.GetDomain()->SetSplitAxis(split_axis);
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
 

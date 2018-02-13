@@ -50,13 +50,13 @@ class ChPlaneCB : public ChSystem::CustomCollisionCallback {
     void CheckSphereProfile(std::shared_ptr<ChBody> sphere);
     ChSystemDistributed* m_sys;  ///< Associated ChSystem
     ChBody* m_body;              ///< Associated ChBody object
-    ChVector<> m_center;  ///< Center of plane
-    ChVector<> m_u;       ///< Unit vector from center to one edge
-    double m_hu;          ///< Distance from center to u edge
-    ChVector<> m_w;       ///< Unit vector from center to other edge
-    double m_hw;          ///< Distance from center to w edge
-    ChVector<> m_n;       ///< Unit inward normal
-};                        // namespace chrono
+    ChVector<> m_center;         ///< Center of plane
+    ChVector<> m_u;              ///< Unit vector from center to one edge
+    double m_hu;                 ///< Distance from center to u edge
+    ChVector<> m_w;              ///< Unit vector from center to other edge
+    double m_hw;                 ///< Distance from center to w edge
+    ChVector<> m_n;              ///< Unit inward normal
+};                               // namespace chrono
 
 /// Function called once every timestep by the system to add all custom collisions
 /// associated with the callback to the system.
@@ -81,11 +81,13 @@ void ChPlaneCB::CheckSphereProfile(std::shared_ptr<ChBody> sphere) {
     double radius = pmodel->mData[0].B[0];
 
     ChVector<> delta = m_center - centerS;  // Displacement from sphere center to plane center
-    if (std::abs(delta ^ m_u) > m_hu || std::abs(delta ^ m_w) > m_hw || std::abs(delta ^ m_n) > radius)
+    if (std::abs(delta.Dot(m_u)) > m_hu + radius || std::abs(delta.Dot(m_w)) > m_hw + radius ||
+        std::abs(delta.Dot(m_n)) > radius)
         return;
 
     // Contact point on the plane
-    ChVector<> vpA = m_center - (delta - (delta ^ m_n) * m_n); // TODO check this negative because direction of delta
+    ChVector<> vpA =
+        m_center - (delta + (delta.Dot(m_n)) * m_n);  // TODO check this negative because direction of delta
 
     // Contact point on sphere
     ChVector<> vpB = centerS - radius * m_n;
@@ -98,7 +100,7 @@ void ChPlaneCB::CheckSphereProfile(std::shared_ptr<ChBody> sphere) {
     contact.vN = m_n;
     contact.vpA = vpA;
     contact.vpB = vpB;
-    contact.distance = std::abs(delta ^ m_n) - radius;
+    contact.distance = std::abs(delta.Dot(m_n)) - radius;  // Should be negative
 
     m_sys->data_manager->host_data.erad_rigid_rigid.push_back(radius);
 
