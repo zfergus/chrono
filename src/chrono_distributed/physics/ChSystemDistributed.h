@@ -151,13 +151,17 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Tells the simulation to send all forces on co-simulation bodies to the master rank
     /// Output: GIDS <- array of global IDS reporting force; forces <- array of corresponding forces
     /// Call on all ranks - rank 0 returns valid count and fills forces arg
-    int CollectCosimForces(CosimForce* forces);
+    int CollectCosimForces(uint* GIDs, uint count, CosimForce* forces);
 
     /// Updates the positions of all cosimulation bodies in the system
     /// Call on all ranks?TODO
     void DistributeCosimPositions(CosimDispl* displacements, uint* GIDs, int* ranks, int size);
 
     void AddBodyAllRanks(std::shared_ptr<ChBody> body);
+
+    /// Removes all bodies below the given height - initial implementation of a
+    /// deactivating boundary condition.
+    void RemoveBodiesBelow(double z);
 
     /// Checks structures added by chrono_distributed. Prints ERROR messages at
     /// inconsistencies.

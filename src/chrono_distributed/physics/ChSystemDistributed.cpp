@@ -15,6 +15,7 @@
 #include <cstdlib>
 
 #include <mpi.h>
+#include <climits>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -22,7 +23,6 @@
 #include <memory>
 #include <numeric>
 #include <string>
-#include <climits>
 
 #include "chrono/collision/ChCCollisionSystem.h"
 #include "chrono/physics/ChBody.h"
@@ -425,18 +425,19 @@ void ChSystemDistributed::CheckIds() {
 // Co-simuation
 // Call on all ranks, rank 0 will return results
 // Make sure forces is large enough to hold all of the data
-int ChSystemDistributed::CollectCosimForces(CosimForce* forces) {
+int ChSystemDistributed::CollectCosimForces(uint* GIDs, uint count, CosimForce* forces) {
     // Gather forces on cosim bodies
     std::vector<CosimForce> send;
-    for (uint i = ddm->first_cosim; i <= ddm->last_cosim; i++) {
-        int local = ddm->GetLocalIndex(i);
+    for (uint i = 0; i < count; i++) {
+		uint gid = GIDs[i];
+        int local = ddm->GetLocalIndex(gid);
         if (local != -1 &&
             (ddm->comm_status[local] == distributed::OWNED || ddm->comm_status[local] == distributed::SHARED_UP ||
              ddm->comm_status[local] == distributed::SHARED_DOWN)) {
             // Get force on body at index local
             int contact_index = data_manager->host_data.ct_body_map[local];
             real3 f = data_manager->host_data.ct_body_force[contact_index];
-            CosimForce cf = {i, my_rank, {f[0], f[1], f[2]}};
+            CosimForce cf = {gid, my_rank, {f[0], f[1], f[2]}};
             send.push_back(std::move(cf));
         }
     }
@@ -453,19 +454,19 @@ int ChSystemDistributed::CollectCosimForces(CosimForce* forces) {
             buf += send.size();
             num_gids += send.size();
         }
-        MPI_Ibarrier(MPI_COMM_WORLD, &r_bar);
+        MPI_Ibarrier(world, &r_bar);
         MPI_Status s_prob;
         int message_waiting = 0;
         int r_bar_flag = 0;
 
         MPI_Test(&r_bar, &r_bar_flag, &s_bar);
         while (!r_bar_flag) {
-            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &message_waiting, &s_prob);
+            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, world, &message_waiting, &s_prob);
             if (message_waiting) {
                 int count;
                 MPI_Get_count(&s_prob, CosimForceType, &count);
                 MPI_Request r_recv;
-                MPI_Irecv(buf, count, CosimForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &r_recv);
+                MPI_Irecv(buf, count, CosimForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
                 buf += count;
                 num_gids += count;
             }
@@ -477,17 +478,17 @@ int ChSystemDistributed::CollectCosimForces(CosimForce* forces) {
         if (send.size() > 0) {
             MPI_Request r_send;
             // Non-blocking synchronous Send
-            MPI_Issend(send.data(), send.size(), CosimForceType, 0, 0, MPI_COMM_WORLD, &r_send);
+            MPI_Issend(send.data(), send.size(), CosimForceType, 0, 0, world, &r_send);
 
             MPI_Status s_send;
             MPI_Wait(&r_send, &s_send);
         }
         // Reaching here indicates to the comm that this rank's message has been recved by rank 0
-        MPI_Ibarrier(MPI_COMM_WORLD, &r_bar);
+        MPI_Ibarrier(world, &r_bar);
     }
 
     MPI_Status stat;
-    MPI_Wait(&r_bar, &stat);  // TODO makes all ranks wait? Could non-masters be doing anything?
+    MPI_Wait(&r_bar, &stat);
 
     return num_gids;
 }
@@ -603,4 +604,12 @@ void ChSystemDistributed::SanityCheck() {
         curr = curr->next;
     }
     // std::cout << " NULL\n";
+}
+
+void ChSystemDistributed::RemoveBodiesBelow(double z) {
+    for (int i = 0; i < data_manager->num_rigid_bodies; i++) {
+        if (ddm->comm_status[i] != distributed::EMPTY && data_manager->host_data.pos_rigid[i][2] < z) {
+            RemoveBody(bodylist[i]);
+        }
+    }
 }
