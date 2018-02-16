@@ -848,8 +848,8 @@ void TerrainNode::Synchronize(int step_number, double time) {
                     break;
             }
         }
-		
-		// TODO: This should only happen from the master rank
+
+        // TODO: This should only happen from the master rank
         // Send vertex indices and forces.
         int num_vert = (int)vert_indices.size();
         MPI_Send(vert_indices.data(), num_vert, MPI_INT, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD);
@@ -883,50 +883,51 @@ void TerrainNode::UpdateNodeProxies(int which) {
 //    - linear and angular velocity: consistent with vertex velocities
 //    - contact shape: redefined to match vertex locations
 void TerrainNode::UpdateFaceProxies(int which) {
-	// BASE DATA: Position of each vertex, velocity of each vertex, gid of each triangle
-	my_system->DistributeCosimDispl()
-	
-    // Readability replacement: shape_data contains all triangle vertex locations, in groups
-    // of three real3, one group for each triangle.
-    auto& shape_data = m_system->data_manager->shape_data.triangle_rigid;
+    // TODO Create structure of displacements and corresponding array of gids
+    my_system->DistributeCosimPositions(CosimDispl * displacements, uint * GIDs, int* ranks, int size);
 
-    for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
-        Triangle tri = m_tire_data[which].m_triangles[it];
-
-        // Vertex locations (expressed in global frame)
-        const ChVector<>& pA = m_tire_data[which].m_vertex_states[tri.v1].pos;
-        const ChVector<>& pB = m_tire_data[which].m_vertex_states[tri.v2].pos;
-        const ChVector<>& pC = m_tire_data[which].m_vertex_states[tri.v3].pos;
-
-        // Position and orientation of proxy body
-        ChVector<> pos = (pA + pB + pC) / 3;
-        m_tire_data[which].m_proxies[it].m_body->SetPos(pos);
-        m_tire_data[which].m_proxies[it].m_body->SetRot(ChQuaternion<>(1, 0, 0, 0));
-
-        // Velocity (absolute) and angular velocity (local)
-        // These are the solution of an over-determined 9x6 linear system. However, for a centroidal
-        // body reference frame, the linear velocity is the average of the 3 vertex velocities.
-        // This leaves a 9x3 linear system for the angular velocity which should be solved in a
-        // least-square sense:   Ax = b   =>  (A'A)x = A'b
-        const ChVector<>& vA = m_tire_data[which].m_vertex_states[tri.v1].vel;
-        const ChVector<>& vB = m_tire_data[which].m_vertex_states[tri.v2].vel;
-        const ChVector<>& vC = m_tire_data[which].m_vertex_states[tri.v3].vel;
-
-        ChVector<> vel = (vA + vB + vC) / 3;
-        m_tire_data[which].m_proxies[it].m_body->SetPos_dt(vel);
-
-        //// TODO: angular velocity
-        m_tire_data[which].m_proxies[it].m_body->SetWvel_loc(ChVector<>(0, 0, 0));
-
-        // Update triangle contact shape (expressed in local frame) by writting directly
-        // into the Chrono::Parallel data structures.
-        // ATTENTION: It is assumed that no other triangle contact shapes have been added
-        // to the system BEFORE those corresponding to the tire mesh faces!
-        unsigned int offset = 3 * m_tire_data[which].m_start_tri + 3 * it;
-        shape_data[offset + 0] = real3(pA.x() - pos.x(), pA.y() - pos.y(), pA.z() - pos.z());
-        shape_data[offset + 1] = real3(pB.x() - pos.x(), pB.y() - pos.y(), pB.z() - pos.z());
-        shape_data[offset + 2] = real3(pC.x() - pos.x(), pC.y() - pos.y(), pC.z() - pos.z());
-    }
+    // NOTE: All of this is done by the system in the above call.
+    // // Readability replacement: shape_data contains all triangle vertex locations, in groups
+    // // of three real3, one group for each triangle.
+    // auto& shape_data = m_system->data_manager->shape_data.triangle_rigid;
+    //
+    // for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
+    //     Triangle tri = m_tire_data[which].m_triangles[it];
+    //
+    //     // Vertex locations (expressed in global frame)
+    //     const ChVector<>& pA = m_tire_data[which].m_vertex_states[tri.v1].pos;
+    //     const ChVector<>& pB = m_tire_data[which].m_vertex_states[tri.v2].pos;
+    //     const ChVector<>& pC = m_tire_data[which].m_vertex_states[tri.v3].pos;
+    //
+    //     // Position and orientation of proxy body
+    //     ChVector<> pos = (pA + pB + pC) / 3;
+    //     m_tire_data[which].m_proxies[it].m_body->SetPos(pos);
+    //     m_tire_data[which].m_proxies[it].m_body->SetRot(ChQuaternion<>(1, 0, 0, 0));
+    //
+    //     // Velocity (absolute) and angular velocity (local)
+    //     // These are the solution of an over-determined 9x6 linear system. However, for a centroidal
+    //     // body reference frame, the linear velocity is the average of the 3 vertex velocities.
+    //     // This leaves a 9x3 linear system for the angular velocity which should be solved in a
+    //     // least-square sense:   Ax = b   =>  (A'A)x = A'b
+    //     const ChVector<>& vA = m_tire_data[which].m_vertex_states[tri.v1].vel;
+    //     const ChVector<>& vB = m_tire_data[which].m_vertex_states[tri.v2].vel;
+    //     const ChVector<>& vC = m_tire_data[which].m_vertex_states[tri.v3].vel;
+    //
+    //     ChVector<> vel = (vA + vB + vC) / 3;
+    //     m_tire_data[which].m_proxies[it].m_body->SetPos_dt(vel);
+    //
+    //     //// TODO: angular velocity
+    //     m_tire_data[which].m_proxies[it].m_body->SetWvel_loc(ChVector<>(0, 0, 0));
+    //
+    //     // Update triangle contact shape (expressed in local frame) by writting directly
+    //     // into the Chrono::Parallel data structures.
+    //     // ATTENTION: It is assumed that no other triangle contact shapes have been added
+    //     // to the system BEFORE those corresponding to the tire mesh faces!
+    //     unsigned int offset = 3 * m_tire_data[which].m_start_tri + 3 * it;
+    //     shape_data[offset + 0] = real3(pA.x() - pos.x(), pA.y() - pos.y(), pA.z() - pos.z());
+    //     shape_data[offset + 1] = real3(pB.x() - pos.x(), pB.y() - pos.y(), pB.z() - pos.z());
+    //     shape_data[offset + 2] = real3(pC.x() - pos.x(), pC.y() - pos.y(), pC.z() - pos.z());
+}
 }
 
 // Collect contact forces on the (node) proxy bodies that are in contact.
@@ -977,15 +978,15 @@ void TerrainNode::ForcesFaceProxies(int which, std::vector<double>& vert_forces,
     uint count = m_tire_data[which].count;
     CosimForce* forces = new CosimForce[count];
 
-    my_system->CollectCosimForces(m_tire_data[which].gids, count, forces); // Collects forces onto master rank
+    my_system->CollectCosimForces(m_tire_data[which].gids, count, forces);  // Collects forces onto master rank
 
     if (my_system->GetMyRank() == MASTER) {
         // Maintain an unordered map of vertex indices and associated contact forces.
         std::unordered_map<int, ChVector<>> my_map;
-		
-		// TODO: Add count to m_tire_data[which]
+
+        // TODO: Add count to m_tire_data[which]
         // TODO: Add gid list in m_tire_data[which]
-		// TODO: Track which trianlges are active and only pass those...
+        // TODO: Track which trianlges are active and only pass those...
 
         // NOTE: it -- the index of a triangle in this tire in m_tire_data[which].m_triangles
         for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
@@ -1001,7 +1002,7 @@ void TerrainNode::ForcesFaceProxies(int which, std::vector<double>& vert_forces,
                 }
             }
 
-			// Do nothing if zero force.
+            // Do nothing if zero force.
             if (IsZero(rforce))
                 continue;
 
@@ -1042,8 +1043,8 @@ void TerrainNode::ForcesFaceProxies(int which, std::vector<double>& vert_forces,
             vert_forces.push_back(kv.second.y());
             vert_forces.push_back(kv.second.z());
         }
-    } // End of only MASTER rank
-	
+    }  // End of only MASTER rank
+
     delete[] forces;
 }
 

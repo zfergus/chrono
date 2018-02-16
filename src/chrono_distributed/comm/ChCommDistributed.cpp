@@ -14,10 +14,10 @@
 
 #include <mpi.h>
 #include <omp.h>
+#include <climits>
 #include <forward_list>
 #include <memory>
 #include <string>
-#include <climits>
 
 #include "chrono_distributed/ChDistributedDataManager.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
@@ -219,11 +219,13 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
                                                       ChMatrix33<>(ChQuaternion<>(rot[0], rot[1], rot[2], rot[3])));
                     break;
                 case chrono::collision::TRIANGLEMESH:
-                    // AddTriangle(A, B, C, pos, rot)
-                    // pos == (0,0,0) because the addition to the position is done at the initial add TODO ?
                     std::static_pointer_cast<ChCollisionModelDistributed>(body->GetCollisionModel())
                         ->AddTriangle(A, ChVector<>(data[0], data[1], data[2]), ChVector<>(data[3], data[4], data[5]),
                                       ChVector<>(0, 0, 0), ChQuaternion<>(rot[0], rot[1], rot[2], rot[3]));
+                    break;
+                case chrono::collision::ELLIPSOID:
+                    body->GetCollisionModel()->AddEllipsoid(
+                        data[0], data[1], data[2], A, ChMatrix33<>(ChQuaternion<>(rot[0], rot[1], rot[2], rot[3])));
                     break;
                 default:
                     GetLog() << "Error: gid " << gid << " rank " << my_sys->GetMyRank() << " type " << (buf + n)->type
@@ -576,17 +578,17 @@ void ChCommDistributed::Exchange() {
                          &recv_status_take_up);
             }
 
-			// Make sure all non-blocking communications are done.
-			if (my_rank != num_ranks - 1) {
-				MPI_Wait(&rq_exchange_up, MPI_STATUS_IGNORE);
-				MPI_Wait(&rq_update_up, MPI_STATUS_IGNORE);
-				MPI_Wait(&rq_take_up, MPI_STATUS_IGNORE);
-			}
-			if (my_rank != 0) {
-				MPI_Wait(&rq_exchange_down, MPI_STATUS_IGNORE);
-				MPI_Wait(&rq_update_down, MPI_STATUS_IGNORE);
-				MPI_Wait(&rq_take_down, MPI_STATUS_IGNORE);
-			}
+            // Make sure all non-blocking communications are done.
+            if (my_rank != num_ranks - 1) {
+                MPI_Wait(&rq_exchange_up, MPI_STATUS_IGNORE);
+                MPI_Wait(&rq_update_up, MPI_STATUS_IGNORE);
+                MPI_Wait(&rq_take_up, MPI_STATUS_IGNORE);
+            }
+            if (my_rank != 0) {
+                MPI_Wait(&rq_exchange_down, MPI_STATUS_IGNORE);
+                MPI_Wait(&rq_update_down, MPI_STATUS_IGNORE);
+                MPI_Wait(&rq_take_down, MPI_STATUS_IGNORE);
+            }
         }  // End of send/recv section
 
 // TODO could do in parallel if counting the spaces in the buffers in the first pass
@@ -663,12 +665,12 @@ void ChCommDistributed::Exchange() {
     if (my_rank != num_ranks - 1)
         ProcessShapes(num_recv_shapes_up, recv_shapes_up);
 
-	if (my_rank != num_ranks - 1) {
-		MPI_Wait(&rq_shapes_up, MPI_STATUS_IGNORE);
-	}
-	if (my_rank != 0) {
-		MPI_Wait(&rq_shapes_down, MPI_STATUS_IGNORE);
-	}
+    if (my_rank != num_ranks - 1) {
+        MPI_Wait(&rq_shapes_up, MPI_STATUS_IGNORE);
+    }
+    if (my_rank != 0) {
+        MPI_Wait(&rq_shapes_down, MPI_STATUS_IGNORE);
+    }
 
     // Free all dynamic memory used for recving
     delete[] recv_exchange_down;
@@ -837,6 +839,7 @@ void ChCommDistributed::UnpackUpdate(BodyUpdate* buf, std::shared_ptr<ChBody> bo
 // Packs all shapes for a single body into the buffer
 int ChCommDistributed::PackShapes(std::vector<Shape>* buf, int index) {
     int shape_count = ddm->body_shape_count[index];
+    shape_container& shape_data = data_manager->shape_data;
 
     // Pack each shape on the body
     for (int i = 0; i < shape_count; i++) {
@@ -845,43 +848,46 @@ int ChCommDistributed::PackShapes(std::vector<Shape>* buf, int index) {
         int shape_index =
             ddm->body_shapes[ddm->body_shape_start[index] + i];  // index of the shape in data_manager->shape_data
 
-        int type = data_manager->shape_data.typ_rigid[shape_index];
-        int start = data_manager->shape_data.start_rigid[shape_index];
+        int type = shape_data.typ_rigid[shape_index];
+        int start = shape_data.start_rigid[shape_index];
         shape.type = type;
 
-        shape.A[0] = data_manager->shape_data.ObA_rigid[shape_index].x;
-        shape.A[1] = data_manager->shape_data.ObA_rigid[shape_index].y;
-        shape.A[2] = data_manager->shape_data.ObA_rigid[shape_index].z;
+        shape.A[0] = shape_data.ObA_rigid[shape_index].x;
+        shape.A[1] = shape_data.ObA_rigid[shape_index].y;
+        shape.A[2] = shape_data.ObA_rigid[shape_index].z;
 
-        shape.R[0] = data_manager->shape_data.ObR_rigid[shape_index].w;
-        shape.R[1] = data_manager->shape_data.ObR_rigid[shape_index].x;
-        shape.R[2] = data_manager->shape_data.ObR_rigid[shape_index].y;
-        shape.R[3] = data_manager->shape_data.ObR_rigid[shape_index].z;
+        shape.R[0] = shape_data.ObR_rigid[shape_index].w;
+        shape.R[1] = shape_data.ObR_rigid[shape_index].x;
+        shape.R[2] = shape_data.ObR_rigid[shape_index].y;
+        shape.R[3] = shape_data.ObR_rigid[shape_index].z;
 
-        /*(buf + i)->fam = data_manager->shape_data.fam_rigid[shape_index];*/
+        /*(buf + i)->fam = shape_data.fam_rigid[shape_index];*/
 
         switch (type) {
             case chrono::collision::SPHERE:
-                shape.data[0] = data_manager->shape_data.sphere_rigid[start];
-#ifdef DistrDebug
-                GetLog() << "Packing sphere: " << (*buf)[i].data[0];
-#endif
+                shape.data[0] = shape_data.sphere_rigid[start];
                 break;
             case chrono::collision::BOX:
-                shape.data[0] = data_manager->shape_data.box_like_rigid[start].x;
-                shape.data[1] = data_manager->shape_data.box_like_rigid[start].y;
-                shape.data[2] = data_manager->shape_data.box_like_rigid[start].z;
+                shape.data[0] = shape_data.box_like_rigid[start].x;
+                shape.data[1] = shape_data.box_like_rigid[start].y;
+                shape.data[2] = shape_data.box_like_rigid[start].z;
                 break;
             case chrono::collision::TRIANGLEMESH:
                 // Pack B
-                shape.data[0] = data_manager->shape_data.triangle_rigid[start + 1].x;
-                shape.data[1] = data_manager->shape_data.triangle_rigid[start + 1].y;
-                shape.data[2] = data_manager->shape_data.triangle_rigid[start + 1].z;
+                shape.data[0] = shape_data.triangle_rigid[start + 1].x;
+                shape.data[1] = shape_data.triangle_rigid[start + 1].y;
+                shape.data[2] = shape_data.triangle_rigid[start + 1].z;
 
                 // Pack C
-                shape.data[3] = data_manager->shape_data.triangle_rigid[start + 2].x;
-                shape.data[4] = data_manager->shape_data.triangle_rigid[start + 2].y;
-                shape.data[5] = data_manager->shape_data.triangle_rigid[start + 2].z;
+                shape.data[3] = shape_data.triangle_rigid[start + 2].x;
+                shape.data[4] = shape_data.triangle_rigid[start + 2].y;
+                shape.data[5] = shape_data.triangle_rigid[start + 2].z;
+            case chrono::collision::ELLIPSOID:
+                // Pack B
+                shape.data[0] = shape_data.box_like_rigid[start].x;
+                shape.data[1] = shape_data.box_like_rigid[start].y;
+                shape.data[2] = shape_data.box_like_rigid[start].z;
+                break;
 
             default:
                 my_sys->ErrorAbort("Invalid shape for transfer\n");

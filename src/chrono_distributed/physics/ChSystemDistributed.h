@@ -38,6 +38,7 @@ typedef struct CosimForce {
     double force[3];
 } CosimForce;
 
+/// Holds data exactly as it should appear in data_manager->shape_data
 typedef struct CosimDispl {
     double A[3];
     double B[3];
@@ -138,6 +139,9 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Debugging function
     double GetLowestZ(uint* gid);
+
+    /// Returns the highest z coordinate in the system
+    double GetHighestZ();
 
     /// Checks for consistency in IDs in the system. Should only be used
     /// for debugging.

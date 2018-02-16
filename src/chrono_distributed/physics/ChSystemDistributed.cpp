@@ -15,6 +15,7 @@
 #include <cstdlib>
 
 #include <mpi.h>
+#include <cfloat>
 #include <climits>
 #include <cmath>
 #include <cstring>
@@ -287,7 +288,7 @@ void ChSystemDistributed::RemoveBody(std::shared_ptr<ChBody> body) {
 
     ddm->comm_status[index] = distributed::EMPTY;
     bodylist[index]->SetBodyFixed(true);
-    bodylist[index]->SetCollide(false);
+    bodylist[index]->SetCollide(false);  // NOTE: Calls collisionsystem::remove
     if (index < ddm->first_empty)
         ddm->first_empty = index;
     GetLog() << "REMOVEBODY\n";
@@ -414,6 +415,18 @@ double ChSystemDistributed::GetLowestZ(uint* local_id) {
     return min;
 }
 
+double ChSystemDistributed::GetHighestZ() {
+    double max = DBL_MIN;
+    for (int i = 0; i < data_manager->num_rigid_bodies; i++) {
+        if (ddm->comm_status[i] != distributed::EMPTY && data_manager->host_data.pos_rigid[i][2] > max) {
+            max = data_manager->host_data.pos_rigid[i][2];
+        }
+    }
+    double reduction;
+    MPI_Allreduce(&max, &reduction, 1, MPI_DOUBLE, MPI_MAX, world);
+    return reduction;
+}
+
 void ChSystemDistributed::CheckIds() {
     for (int i = 0; i < data_manager->num_rigid_bodies; i++) {
         if (bodylist[i]->GetId() != i) {
@@ -429,7 +442,7 @@ int ChSystemDistributed::CollectCosimForces(uint* GIDs, uint count, CosimForce* 
     // Gather forces on cosim bodies
     std::vector<CosimForce> send;
     for (uint i = 0; i < count; i++) {
-		uint gid = GIDs[i];
+        uint gid = GIDs[i];
         int local = ddm->GetLocalIndex(gid);
         if (local != -1 &&
             (ddm->comm_status[local] == distributed::OWNED || ddm->comm_status[local] == distributed::SHARED_UP ||

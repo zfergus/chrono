@@ -85,6 +85,13 @@ void ChDomainDistributed::SplitDomain() {
     split = true;
 }
 
+int ChDomainDistributed::GetRank(ChVector<double> pos) {
+    double sub_len = subhi[split_axis] - sublo[split_axis];
+    double pt = pos[split_axis] - boxlo[split_axis];
+
+    return (int)(pt / sub_len);
+}
+
 distributed::COMM_STATUS ChDomainDistributed::GetRegion(double pos) {
     int num_ranks = my_sys->GetNumRanks();
     if (num_ranks == 1) {
