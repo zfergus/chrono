@@ -19,8 +19,8 @@
 //
 // =============================================================================
 
-#ifndef HMMWV_COSIM_TERRAINNODE_H
-#define HMMWV_COSIM_TERRAINNODE_H
+#ifndef HMMWV_COSIM_TERRAINNODEDISTR_H
+#define HMMWV_COSIM_TERRAINNODEDISTR_H
 
 #include <vector>
 
@@ -28,24 +28,23 @@
 #include "chrono/utils/ChUtilsGenerators.h"
 #include "chrono/utils/ChUtilsInputOutput.h"
 
-#include "chrono_parallel/physics/ChSystemParallel.h"
+#include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "BaseNode.h"
 
 // =============================================================================
 
-class TerrainNode : public BaseNode {
+class TerrainNodeDistr : public BaseNode {
   public:
     enum Type { RIGID, GRANULAR };
 
-    TerrainNode(Type type,                                            ///< terrain type (RIGID or GRANULAR)
-                chrono::ChMaterialSurface::ContactMethod method,  ///< contact method (penalty or complementatiry)
-                int num_tires,                                        ///< number of vehicle tires
-                bool use_checkpoint,                                  ///< initialize granular terrain from checkpoint
-                bool render,                                          ///< use OpenGL rendering
-                int num_threads                                       ///< number of OpenMP threads
-                );
-    ~TerrainNode();
+    TerrainNodeDistr(Type type,                                        ///< terrain type (RIGID or GRANULAR)
+                     int num_tires,                                    ///< number of vehicle tires
+                     bool use_checkpoint,                              ///< initialize granular terrain from checkpoint
+                     bool render,                                      ///< use OpenGL rendering
+                     int num_threads                                   ///< number of OpenMP threads
+    );
+    ~TerrainNodeDistr();
 
     /// Set container dimensions.
     void SetContainerDimensions(double length,    ///< length in X direction (default: 2)
@@ -165,10 +164,9 @@ class TerrainNode : public BaseNode {
 
     Type m_type;  ///< terrain type (RIGID or GRANULAR)
 
-    chrono::ChSystemParallel* m_system;  ///< containing system
+    chrono::ChSystemDistributed* m_system;  ///< containing system
     bool m_constructed;                  ///< system construction completed?
 
-    chrono::ChMaterialSurface::ContactMethod m_method;              ///< contact method (penalty or complementarity)
     std::shared_ptr<chrono::ChMaterialSurface> m_material_terrain;  ///< material properties for terrain bodies
 
     int m_num_tires;                    ///< number of vehicle tires

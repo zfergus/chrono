@@ -53,7 +53,10 @@ set(TEST_FILES
     TireNode.h
     TireNode.cpp
     TerrainNode.h
-    TerrainNode.cpp)
+    TerrainNode.cpp
+    TerrainNodeDistr.h
+    TerrainNodeDistr.cpp
+    )
 
 source_group("" FILES ${TEST_FILES})
 

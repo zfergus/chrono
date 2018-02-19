@@ -35,29 +35,27 @@
 #include "chrono_opengl/ChOpenGLWindow.h"
 #endif
 
-#include "TerrainNode.h"
+#include "TerrainNodeDistr.h"
 
 using std::cout;
 using std::endl;
 
 using namespace chrono;
 
-const std::string TerrainNode::m_checkpoint_filename = "checkpoint.dat";
+const std::string TerrainNodeDistr::m_checkpoint_filename = "checkpoint.dat";
 
 // -----------------------------------------------------------------------------
 // Construction of the terrain node:
-// - create the (parallel) Chrono system and set solver parameters
+// - create the (distributed) Chrono system and set solver parameters
 // - create the OpenGL visualization window
 // -----------------------------------------------------------------------------
-TerrainNode::TerrainNode(Type type,
-                         ChMaterialSurface::ContactMethod method,
+TerrainNodeDistr::TerrainNodeDistr(Type type,
                          int num_tires,
                          bool use_checkpoint,
                          bool render,
                          int num_threads)
     : BaseNode("TERRAIN"),
       m_type(type),
-      m_method(method),
       m_num_tires(num_tires),
       m_use_checkpoint(use_checkpoint),
       m_render(render),
@@ -70,8 +68,8 @@ TerrainNode::TerrainNode(Type type,
       m_init_height(0) {
     m_prefix = "[Terrain node]";
 
-    cout << m_prefix << " type = " << type << " method = " << method << " use_checkpoint = " << use_checkpoint
-         << " num_threads = " << num_threads << endl;
+    cout << m_prefix << " type = " << type << " method = " << ChMaterialSurface::ContactMethod::SMC
+         << " use_checkpoint = " << use_checkpoint << " num_threads = " << num_threads << endl;
 
     m_tire_data.resize(m_num_tires);
 
@@ -99,45 +97,18 @@ TerrainNode::TerrainNode(Type type,
     m_mass_pF = 1;
 
     // Default terrain contact material
-    switch (m_method) {
-        case ChMaterialSurface::SMC:
-            m_material_terrain = std::make_shared<ChMaterialSurfaceSMC>();
-            break;
-        case ChMaterialSurface::NSC:
-            m_material_terrain = std::make_shared<ChMaterialSurfaceNSC>();
-            break;
-    }
+    m_material_terrain = std::make_shared<ChMaterialSurfaceSMC>();
 
     // --------------------------
     // Create the parallel system
     // --------------------------
 
     // Create system and set default method-specific solver settings
-    switch (m_method) {
-        case ChMaterialSurface::SMC: {
-            ChSystemParallelSMC* sys = new ChSystemParallelSMC;
-            sys->GetSettings()->solver.contact_force_model = ChSystemSMC::Hertz;
-            sys->GetSettings()->solver.tangential_displ_mode = ChSystemSMC::TangentialDisplacementModel::OneStep;
-            sys->GetSettings()->solver.use_material_properties = true;
-            m_system = sys;
-
-            break;
-        }
-        case ChMaterialSurface::NSC: {
-            ChSystemParallelNSC* sys = new ChSystemParallelNSC;
-            sys->GetSettings()->solver.solver_mode = SolverMode::SLIDING;
-            sys->GetSettings()->solver.max_iteration_normal = 0;
-            sys->GetSettings()->solver.max_iteration_sliding = 200;
-            sys->GetSettings()->solver.max_iteration_spinning = 0;
-            sys->GetSettings()->solver.alpha = 0;
-            sys->GetSettings()->solver.contact_recovery_speed = -1;
-            sys->GetSettings()->collision.collision_envelope = 0.001;
-            sys->ChangeSolverType(SolverType::APGD);
-            m_system = sys;
-
-            break;
-        }
-    }
+    ChSystemParallelSMC* sys = new ChSystemParallelSMC;
+    sys->GetSettings()->solver.contact_force_model = ChSystemSMC::Hertz;
+    sys->GetSettings()->solver.tangential_displ_mode = ChSystemSMC::TangentialDisplacementModel::OneStep;
+    sys->GetSettings()->solver.use_material_properties = true;
+    m_system = sys;
 
     // Solver settings independent of method type
     m_system->Set_G_acc(ChVector<>(0, 0, m_gacc));
@@ -174,13 +145,13 @@ TerrainNode::TerrainNode(Type type,
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-TerrainNode::~TerrainNode() {
+TerrainNodeDistr::~TerrainNodeDistr() {
     delete m_system;
 }
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::SetContainerDimensions(double length, double width, double height, double thickness) {
+void TerrainNodeDistr::SetContainerDimensions(double length, double width, double height, double thickness) {
     m_hdimX = length / 2;
     m_hdimY = width / 2;
     m_hdimZ = height / 2;
@@ -194,16 +165,16 @@ void TerrainNode::SetContainerDimensions(double length, double width, double hei
 #endif
 }
 
-void TerrainNode::SetPath(std::shared_ptr<ChBezierCurve> path) {
+void TerrainNodeDistr::SetPath(std::shared_ptr<ChBezierCurve> path) {
     m_render_path = true;
     m_path = path;
 }
 
-void TerrainNode::SetPlatformLength(double length) {
+void TerrainNodeDistr::SetPlatformLength(double length) {
     m_hlenX = length / 2;
 }
 
-void TerrainNode::SetGranularMaterial(double radius, double density, int num_layers) {
+void TerrainNodeDistr::SetGranularMaterial(double radius, double density, int num_layers) {
     assert(m_type == GRANULAR);
     m_radius_g = radius;
     m_rho_g = density;
@@ -211,29 +182,29 @@ void TerrainNode::SetGranularMaterial(double radius, double density, int num_lay
     m_system->GetSettings()->collision.collision_envelope = 0.1 * radius;
 }
 
-void TerrainNode::UseMaterialProperties(bool flag) {
+void TerrainNodeDistr::UseMaterialProperties(bool flag) {
     assert(m_system->GetContactMethod() == ChMaterialSurface::SMC);
     m_system->GetSettings()->solver.use_material_properties = flag;
 }
 
-void TerrainNode::SetContactForceModel(ChSystemSMC::ContactForceModel model) {
+void TerrainNodeDistr::SetContactForceModel(ChSystemSMC::ContactForceModel model) {
     assert(m_system->GetContactMethod() == ChMaterialSurface::SMC);
     m_system->GetSettings()->solver.contact_force_model = model;
 }
 
-void TerrainNode::SetMaterialSurface(const std::shared_ptr<ChMaterialSurface>& mat) {
+void TerrainNodeDistr::SetMaterialSurface(const std::shared_ptr<ChMaterialSurface>& mat) {
     assert(mat->GetContactMethod() == m_system->GetContactMethod());
     m_material_terrain = mat;
 }
 
-void TerrainNode::SetProxyProperties(double mass, double radius, bool fixed) {
+void TerrainNodeDistr::SetProxyProperties(double mass, double radius, bool fixed) {
     assert(m_type == RIGID);
     m_mass_pN = mass;
     m_radius_pN = radius;
     m_fixed_proxies = fixed;
 }
 
-void TerrainNode::SetProxyProperties(double mass, bool fixed) {
+void TerrainNodeDistr::SetProxyProperties(double mass, bool fixed) {
     assert(m_type == GRANULAR);
     m_mass_pF = mass;
     m_fixed_proxies = fixed;
@@ -246,7 +217,7 @@ void TerrainNode::SetProxyProperties(double mass, bool fixed) {
 // - create the container body
 // - if specified, create the granular material
 // -----------------------------------------------------------------------------
-void TerrainNode::Construct() {
+void TerrainNodeDistr::Construct() {
     if (m_constructed)
         return;
 
@@ -409,7 +380,7 @@ void TerrainNode::Construct() {
     outf << "Terrain type = " << (m_type == RIGID ? "RIGID" : "GRANULAR") << endl;
     outf << "System settings" << endl;
     outf << "   Integration step size = " << m_step_size << endl;
-    outf << "   Contact method = " << (m_method == ChMaterialSurface::SMC ? "SMC" : "NSC") << endl;
+    outf << "   Contact method = SMC" << endl;
     outf << "   Use material properties? " << (m_system->GetSettings()->solver.use_material_properties ? "YES" : "NO")
          << endl;
     outf << "   Collision envelope = " << m_system->GetSettings()->collision.collision_envelope << endl;
@@ -417,28 +388,16 @@ void TerrainNode::Construct() {
     outf << "   X = " << 2 * m_hdimX << "  Y = " << 2 * m_hdimY << "  Z = " << 2 * m_hdimZ << endl;
     outf << "   wall thickness = " << 2 * m_hthick << endl;
     outf << "Terrain material properties" << endl;
-    switch (m_method) {
-        case ChMaterialSurface::SMC: {
-            auto mat = std::static_pointer_cast<ChMaterialSurfaceSMC>(m_material_terrain);
-            outf << "   Coefficient of friction    = " << mat->GetKfriction() << endl;
-            outf << "   Coefficient of restitution = " << mat->GetRestitution() << endl;
-            outf << "   Young modulus              = " << mat->GetYoungModulus() << endl;
-            outf << "   Poisson ratio              = " << mat->GetPoissonRatio() << endl;
-            outf << "   Adhesion force             = " << mat->GetAdhesion() << endl;
-            outf << "   Kn = " << mat->GetKn() << endl;
-            outf << "   Gn = " << mat->GetGn() << endl;
-            outf << "   Kt = " << mat->GetKt() << endl;
-            outf << "   Gt = " << mat->GetGt() << endl;
-            break;
-        }
-        case ChMaterialSurface::NSC: {
-            auto mat = std::static_pointer_cast<ChMaterialSurfaceNSC>(m_material_terrain);
-            outf << "   Coefficient of friction    = " << mat->GetKfriction() << endl;
-            outf << "   Coefficient of restitution = " << mat->GetRestitution() << endl;
-            outf << "   Cohesion force             = " << mat->GetCohesion() << endl;
-            break;
-        }
-    }
+    auto mat = std::static_pointer_cast<ChMaterialSurfaceSMC>(m_material_terrain);
+    outf << "   Coefficient of friction    = " << mat->GetKfriction() << endl;
+    outf << "   Coefficient of restitution = " << mat->GetRestitution() << endl;
+    outf << "   Young modulus              = " << mat->GetYoungModulus() << endl;
+    outf << "   Poisson ratio              = " << mat->GetPoissonRatio() << endl;
+    outf << "   Adhesion force             = " << mat->GetAdhesion() << endl;
+    outf << "   Kn = " << mat->GetKn() << endl;
+    outf << "   Gn = " << mat->GetGn() << endl;
+    outf << "   Kt = " << mat->GetKt() << endl;
+    outf << "   Gt = " << mat->GetGt() << endl;
     outf << "Granular material properties" << endl;
     outf << "   particle radius  = " << m_radius_g << endl;
     outf << "   particle density = " << m_rho_g << endl;
@@ -465,7 +424,7 @@ void TerrainNode::Construct() {
 // - simulate granular material to settle or read from checkpoint
 // - record height of terrain
 // -----------------------------------------------------------------------------
-void TerrainNode::Settle() {
+void TerrainNodeDistr::Settle() {
     assert(m_type == GRANULAR);
 
     Construct();
@@ -582,7 +541,7 @@ void TerrainNode::Settle() {
 // - receive tire contact material properties and create the "tire" material
 // - create the appropriate proxy bodies (state not set yet)
 // -----------------------------------------------------------------------------
-void TerrainNode::Initialize() {
+void TerrainNodeDistr::Initialize() {
     Construct();
 
     // Reset system time
@@ -655,33 +614,18 @@ void TerrainNode::Initialize() {
         MPI_Status status_m;
         MPI_Recv(mat_props, 8, MPI_FLOAT, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_m);
 
-        switch (m_method) {
-            case ChMaterialSurface::SMC: {
-                // Properties for tire
-                auto mat_tire = std::make_shared<ChMaterialSurfaceSMC>();
-                mat_tire->SetFriction(mat_props[0]);
-                mat_tire->SetRestitution(mat_props[1]);
-                mat_tire->SetYoungModulus(mat_props[2]);
-                mat_tire->SetPoissonRatio(mat_props[3]);
-                mat_tire->SetKn(mat_props[4]);
-                mat_tire->SetGn(mat_props[5]);
-                mat_tire->SetKt(mat_props[6]);
-                mat_tire->SetGt(mat_props[7]);
+        // Properties for tire
+        auto mat_tire = std::make_shared<ChMaterialSurfaceSMC>();
+        mat_tire->SetFriction(mat_props[0]);
+        mat_tire->SetRestitution(mat_props[1]);
+        mat_tire->SetYoungModulus(mat_props[2]);
+        mat_tire->SetPoissonRatio(mat_props[3]);
+        mat_tire->SetKn(mat_props[4]);
+        mat_tire->SetGn(mat_props[5]);
+        mat_tire->SetKt(mat_props[6]);
+        mat_tire->SetGt(mat_props[7]);
 
-                m_tire_data[which].m_material_tire = mat_tire;
-
-                break;
-            }
-            case ChMaterialSurface::NSC: {
-                auto mat_tire = std::make_shared<ChMaterialSurfaceNSC>();
-                mat_tire->SetFriction(mat_props[0]);
-                mat_tire->SetRestitution(mat_props[1]);
-
-                m_tire_data[which].m_material_tire = mat_tire;
-
-                break;
-            }
-        }
+        m_tire_data[which].m_material_tire = mat_tire;
 
         cout << m_prefix << " received tire material:  friction = " << mat_props[0] << endl;
 
@@ -707,7 +651,7 @@ void TerrainNode::Initialize() {
 // Maintain a list of all bodies associated with the tire.
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
-void TerrainNode::CreateNodeProxies(int which) {
+void TerrainNodeDistr::CreateNodeProxies(int which) {
     ChVector<> inertia_pN = 0.4 * m_mass_pN * m_radius_pN * m_radius_pN * ChVector<>(1, 1, 1);
     for (unsigned int iv = 0; iv < m_tire_data[which].m_num_vert; iv++) {
         auto body = std::shared_ptr<ChBody>(m_system->NewBody());
@@ -734,7 +678,7 @@ void TerrainNode::CreateNodeProxies(int which) {
 // Maintain a list of all bodies associated with the tire.
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
-void TerrainNode::CreateFaceProxies(int which) {
+void TerrainNodeDistr::CreateFaceProxies(int which) {
     //// TODO:  better approximation of mass / inertia?
     ChVector<> inertia_pF = 1e-3 * m_mass_pF * ChVector<>(0.1, 0.1, 0.1);
 
@@ -771,7 +715,7 @@ void TerrainNode::CreateFaceProxies(int which) {
 // - calculate current cumulative contact forces on all system bodies
 // - extract and send forces at each vertex
 // -----------------------------------------------------------------------------
-void TerrainNode::Synchronize(int step_number, double time) {
+void TerrainNodeDistr::Synchronize(int step_number, double time) {
     // --------------------------------------------------------------
     // Loop over all tires, receive mesh vertex state, update proxies
     // --------------------------------------------------------------
@@ -864,7 +808,7 @@ void TerrainNode::Synchronize(int step_number, double time) {
 
 // Set position and velocity of proxy bodies based on tire mesh vertices.
 // Set orientation to identity and angular velocity to zero.
-void TerrainNode::UpdateNodeProxies(int which) {
+void TerrainNodeDistr::UpdateNodeProxies(int which) {
     for (unsigned int iv = 0; iv < m_tire_data[which].m_num_vert; iv++) {
         m_tire_data[which].m_proxies[iv].m_body->SetPos(m_tire_data[which].m_vertex_states[iv].pos);
         m_tire_data[which].m_proxies[iv].m_body->SetPos_dt(m_tire_data[which].m_vertex_states[iv].vel);
@@ -882,57 +826,86 @@ void TerrainNode::UpdateNodeProxies(int which) {
 //    - orientation: identity
 //    - linear and angular velocity: consistent with vertex velocities
 //    - contact shape: redefined to match vertex locations
-void TerrainNode::UpdateFaceProxies(int which) {
+void TerrainNodeDistr::UpdateFaceProxies(int which) {
     // TODO Create structure of displacements and corresponding array of gids
-    my_system->DistributeCosimPositions(CosimDispl * displacements, uint * GIDs, int* ranks, int size);
+    ////void ChSystemDistributed::DistributeCosimPositions(CosimDispl* displacements, uint* GIDs, int* ranks, int size)
+    ////m_system->DistributeCosimPositions(displacements, GIDs, ranks, size);
 
+    struct BodyState {
+        ChVector<> pos;
+        ChQuaternion<> rot;
+        ChVector<> pos_dt;
+        ChQuaternion<> rot_dt;
+    };
+
+    std::vector<uint> gids;
+    std::vector<BodyState> states;
+    m_system->SetBodyStates(gids, states);
+
+    std::vector<double> radii;
+    m_system->SetSphereShapes(gids, radii);
+
+
+    struct TriData {
+        ChVector<> v1;
+        ChVector<> v2;
+        ChVector<> v3;
+    };
+
+    std::vector<TriData> new_shapes;
+    std::vector<int> shape_idx;
+    m_system->SetTriangleShapes(gids, shape_idx, new_shapes);
+
+
+    /*
     // NOTE: All of this is done by the system in the above call.
-    // // Readability replacement: shape_data contains all triangle vertex locations, in groups
-    // // of three real3, one group for each triangle.
-    // auto& shape_data = m_system->data_manager->shape_data.triangle_rigid;
-    //
-    // for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
-    //     Triangle tri = m_tire_data[which].m_triangles[it];
-    //
-    //     // Vertex locations (expressed in global frame)
-    //     const ChVector<>& pA = m_tire_data[which].m_vertex_states[tri.v1].pos;
-    //     const ChVector<>& pB = m_tire_data[which].m_vertex_states[tri.v2].pos;
-    //     const ChVector<>& pC = m_tire_data[which].m_vertex_states[tri.v3].pos;
-    //
-    //     // Position and orientation of proxy body
-    //     ChVector<> pos = (pA + pB + pC) / 3;
-    //     m_tire_data[which].m_proxies[it].m_body->SetPos(pos);
-    //     m_tire_data[which].m_proxies[it].m_body->SetRot(ChQuaternion<>(1, 0, 0, 0));
-    //
-    //     // Velocity (absolute) and angular velocity (local)
-    //     // These are the solution of an over-determined 9x6 linear system. However, for a centroidal
-    //     // body reference frame, the linear velocity is the average of the 3 vertex velocities.
-    //     // This leaves a 9x3 linear system for the angular velocity which should be solved in a
-    //     // least-square sense:   Ax = b   =>  (A'A)x = A'b
-    //     const ChVector<>& vA = m_tire_data[which].m_vertex_states[tri.v1].vel;
-    //     const ChVector<>& vB = m_tire_data[which].m_vertex_states[tri.v2].vel;
-    //     const ChVector<>& vC = m_tire_data[which].m_vertex_states[tri.v3].vel;
-    //
-    //     ChVector<> vel = (vA + vB + vC) / 3;
-    //     m_tire_data[which].m_proxies[it].m_body->SetPos_dt(vel);
-    //
-    //     //// TODO: angular velocity
-    //     m_tire_data[which].m_proxies[it].m_body->SetWvel_loc(ChVector<>(0, 0, 0));
-    //
-    //     // Update triangle contact shape (expressed in local frame) by writting directly
-    //     // into the Chrono::Parallel data structures.
-    //     // ATTENTION: It is assumed that no other triangle contact shapes have been added
-    //     // to the system BEFORE those corresponding to the tire mesh faces!
-    //     unsigned int offset = 3 * m_tire_data[which].m_start_tri + 3 * it;
-    //     shape_data[offset + 0] = real3(pA.x() - pos.x(), pA.y() - pos.y(), pA.z() - pos.z());
-    //     shape_data[offset + 1] = real3(pB.x() - pos.x(), pB.y() - pos.y(), pB.z() - pos.z());
-    //     shape_data[offset + 2] = real3(pC.x() - pos.x(), pC.y() - pos.y(), pC.z() - pos.z());
-}
+    // Readability replacement: shape_data contains all triangle vertex locations, in groups
+    // of three real3, one group for each triangle.
+    auto& shape_data = m_system->data_manager->shape_data.triangle_rigid;
+
+    for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
+        Triangle tri = m_tire_data[which].m_triangles[it];
+
+        // Vertex locations (expressed in global frame)
+        const ChVector<>& pA = m_tire_data[which].m_vertex_states[tri.v1].pos;
+        const ChVector<>& pB = m_tire_data[which].m_vertex_states[tri.v2].pos;
+        const ChVector<>& pC = m_tire_data[which].m_vertex_states[tri.v3].pos;
+
+        // Position and orientation of proxy body
+        ChVector<> pos = (pA + pB + pC) / 3;
+        m_tire_data[which].m_proxies[it].m_body->SetPos(pos);
+        m_tire_data[which].m_proxies[it].m_body->SetRot(ChQuaternion<>(1, 0, 0, 0));
+
+        // Velocity (absolute) and angular velocity (local)
+        // These are the solution of an over-determined 9x6 linear system. However, for a centroidal
+        // body reference frame, the linear velocity is the average of the 3 vertex velocities.
+        // This leaves a 9x3 linear system for the angular velocity which should be solved in a
+        // least-square sense:   Ax = b   =>  (A'A)x = A'b
+        const ChVector<>& vA = m_tire_data[which].m_vertex_states[tri.v1].vel;
+        const ChVector<>& vB = m_tire_data[which].m_vertex_states[tri.v2].vel;
+        const ChVector<>& vC = m_tire_data[which].m_vertex_states[tri.v3].vel;
+
+        ChVector<> vel = (vA + vB + vC) / 3;
+        m_tire_data[which].m_proxies[it].m_body->SetPos_dt(vel);
+
+        //// TODO: angular velocity
+        m_tire_data[which].m_proxies[it].m_body->SetWvel_loc(ChVector<>(0, 0, 0));
+
+        // Update triangle contact shape (expressed in local frame) by writting directly
+        // into the Chrono::Parallel data structures.
+        // ATTENTION: It is assumed that no other triangle contact shapes have been added
+        // to the system BEFORE those corresponding to the tire mesh faces!
+        unsigned int offset = 3 * m_tire_data[which].m_start_tri + 3 * it;
+        shape_data[offset + 0] = real3(pA.x() - pos.x(), pA.y() - pos.y(), pA.z() - pos.z());
+        shape_data[offset + 1] = real3(pB.x() - pos.x(), pB.y() - pos.y(), pB.z() - pos.z());
+        shape_data[offset + 2] = real3(pC.x() - pos.x(), pC.y() - pos.y(), pC.z() - pos.z());
+    }
+    */
 }
 
 // Collect contact forces on the (node) proxy bodies that are in contact.
 // Load mesh vertex forces and corresponding indices.
-void TerrainNode::ForcesNodeProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
+void TerrainNodeDistr::ForcesNodeProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
     for (unsigned int iv = 0; iv < m_tire_data[which].m_num_vert; iv++) {
         real3 force = m_system->GetBodyContactForce(m_tire_data[which].m_proxies[iv].m_body);
 
@@ -947,7 +920,7 @@ void TerrainNode::ForcesNodeProxies(int which, std::vector<double>& vert_forces,
 
 // Calculate barycentric coordinates (a1, a2, a3) for a given point P
 // with respect to the triangle with vertices {v1, v2, v3}
-ChVector<> TerrainNode::CalcBarycentricCoords(const ChVector<>& v1,
+ChVector<> TerrainNodeDistr::CalcBarycentricCoords(const ChVector<>& v1,
                                               const ChVector<>& v2,
                                               const ChVector<>& v3,
                                               const ChVector<>& vP) {
@@ -974,13 +947,13 @@ ChVector<> TerrainNode::CalcBarycentricCoords(const ChVector<>& v1,
 // NOTE: Must be called by all terrain ranks only master will have valid output
 // Collect contact forces on the (face) proxy bodies that are in contact.
 // Load mesh vertex forces and corresponding indices.
-void TerrainNode::ForcesFaceProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
-    uint count = m_tire_data[which].count;
-    CosimForce* forces = new CosimForce[count];
+void TerrainNodeDistr::ForcesFaceProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
 
-    my_system->CollectCosimForces(m_tire_data[which].gids, count, forces);  // Collects forces onto master rank
+    ////m_system->CollectCosimForces(m_tire_data[which].gids, count, forces);  // Collects forces onto master rank
 
-    if (my_system->GetMyRank() == MASTER) {
+    auto forces = m_system->GetBodyContactForces(m_tire_data[which].gids);
+
+    if (m_system->GetMyRank() == MASTER) {
         // Maintain an unordered map of vertex indices and associated contact forces.
         std::unordered_map<int, ChVector<>> my_map;
 
@@ -1051,7 +1024,7 @@ void TerrainNode::ForcesFaceProxies(int which, std::vector<double>& vert_forces,
 // -----------------------------------------------------------------------------
 // Advance simulation of the terrain node by the specified duration
 // -----------------------------------------------------------------------------
-void TerrainNode::Advance(double step_size) {
+void TerrainNodeDistr::Advance(double step_size) {
     m_timer.reset();
     m_timer.start();
     double t = 0;
@@ -1088,7 +1061,7 @@ void TerrainNode::Advance(double step_size) {
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::OutputData(int frame) {
+void TerrainNodeDistr::OutputData(int frame) {
     // Append to results output file
     if (m_outf.is_open()) {
         //// TODO
@@ -1105,7 +1078,7 @@ void TerrainNode::OutputData(int frame) {
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::WriteParticleInformation(utils::CSV_writer& csv) {
+void TerrainNodeDistr::WriteParticleInformation(utils::CSV_writer& csv) {
     // Write current time, number of granular particles and their radius
     csv << m_system->GetChTime() << endl;
     csv << m_num_particles << m_radius_g << endl;
@@ -1120,7 +1093,7 @@ void TerrainNode::WriteParticleInformation(utils::CSV_writer& csv) {
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::WriteCheckpoint() {
+void TerrainNodeDistr::WriteCheckpoint() {
     utils::CSV_writer csv(" ");
 
     // Write current time and number of granular material bodies.
@@ -1143,20 +1116,20 @@ void TerrainNode::WriteCheckpoint() {
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::PrintNodeProxiesContactData(int which) {
+void TerrainNodeDistr::PrintNodeProxiesContactData(int which) {
     //// TODO: implement this
 }
 
-void TerrainNode::PrintFaceProxiesContactData(int which) {
+void TerrainNodeDistr::PrintFaceProxiesContactData(int which) {
     //// TODO: implement this
 }
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
-void TerrainNode::PrintNodeProxiesUpdateData(int which) {
+void TerrainNodeDistr::PrintNodeProxiesUpdateData(int which) {
     //// TODO: implement this
 }
 
-void TerrainNode::PrintFaceProxiesUpdateData(int which) {
+void TerrainNodeDistr::PrintFaceProxiesUpdateData(int which) {
     //// TODO: implement this
 }
