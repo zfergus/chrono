@@ -27,9 +27,9 @@
 #include "chrono/utils/ChUtilsGeometry.h"
 #include "chrono/utils/ChUtilsInputOutput.h"
 
-#include "chrono_parallel/collision/ChNarrowphaseRUtils.h"
 #include "chrono_parallel/physics/ChSystemParallel.h"
 #include "chrono_parallel/solver/ChSystemDescriptorParallel.h"
+#include "chrono_parallel/collision/ChNarrowphaseRUtils.h"
 
 // Note: CHRONO_OPENGL is defined in ChConfig.h
 #ifdef CHRONO_OPENGL
@@ -49,9 +49,9 @@ using std::endl;
 // Comment the following line to use NSC contact
 #define USE_SMC
 
-ChVector<> initPos(0.1, 0.1, 1.0);
-// ChQuaternion<> initRot(1.0, 0.0, 0.0, 0.0);
-ChQuaternion<> initRot = Q_from_AngAxis(CH_C_PI / 3, ChVector<>(1, 0, 0));
+ChVector<> initPos(0.1, 0.1, 0.05);
+ChQuaternion<> initRot(1.0, 0.0, 0.0, 0.0);
+//ChQuaternion<> initRot = Q_from_AngAxis(CH_C_PI / 3, ChVector<>(1, 0, 0));
 
 ChVector<> initLinVel(0.0, 0.0, 0.0);
 ChVector<> initAngVel(0.0, 0.0, 0.0);
@@ -71,7 +71,7 @@ double time_end = 10;
 
 // Solver parameters
 #ifdef USE_SMC
-double time_step = 1e-3;
+double time_step = 1e-4;
 int max_iteration = 20;
 #else
 double time_step = 1e-3;
@@ -129,7 +129,7 @@ void CreateGround(ChSystemParallel* system) {
 // =============================================================================
 // Create falling object
 // =============================================================================
-void CreateObject(ChSystemParallel* system) {
+std::shared_ptr<ChBody> CreateObject(ChSystemParallel* system) {
     double rho_o = 2000.0;
 
 #ifdef USE_SMC
@@ -152,41 +152,22 @@ void CreateObject(ChSystemParallel* system) {
     obj->SetCollide(true);
     obj->SetBodyFixed(false);
 
-    // Calculate bounding radius, volume, and gyration
+    // Mass and inertia
+    double mass = 1;
+    ChVector<> inertia = 1e-3 * mass * ChVector<>(0.1, 0.1, 0.1);
+    obj->SetMass(mass);
+    obj->SetInertia(inertia);
+
     // Set contact and visualization shape
-
-    double rb;
-    double vol;
-    ChMatrix33<> J;
-
     obj->GetCollisionModel()->ClearModel();
-
-    double radius = 0.3;
-    rb = utils::CalcSphereBradius(radius);
-    vol = utils::CalcSphereVolume(radius);
-    J = utils::CalcSphereGyration(radius);
-    // utils::AddSphereGeometry(obj.get(), radius);
-    ChVector<> A(-radius, -radius, 0);
-    ChVector<> B(radius, -radius, 0);
-    ChVector<> C(0, radius, 0);
-	ChVector<> triangle_pos = ChVector<>(0);
-    std::dynamic_pointer_cast<ChCollisionModelParallel>(obj->GetCollisionModel())->AddTriangle(A, B, C, triangle_pos);
-	
-	auto sphere = std::make_shared<ChSphereShape>();
-	sphere->GetSphereGeometry().rad = radius;
-	sphere->Pos = initPos;
-	sphere->Rot = initRot;
-	obj->GetAssets().push_back(sphere);
-
+    double len = 1;
+    ChVector<> A(len, -len, 0);
+    ChVector<> B(-len, -len, 0);
+    ChVector<> C(0, len, 0);	
+    utils::AddTriangle(obj.get(), A, B, C, "triangle");
     obj->GetCollisionModel()->BuildModel();
 
-    // Set mass and inertia.
-    double mass = rho_o * vol;
-    obj->SetMass(mass);
-    obj->SetInertia(J * mass);
-
     // Set initial state.
-    assert(initPos.z() > rb);
     obj->SetPos(initPos);
     obj->SetRot(initRot);
     obj->SetPos_dt(initLinVel);
@@ -194,6 +175,8 @@ void CreateObject(ChSystemParallel* system) {
 
     // Add object to system.
     system->AddBody(obj);
+
+    return obj;
 }
 
 // =============================================================================
@@ -248,14 +231,14 @@ int main(int argc, char* argv[]) {
 
     // Create bodies.
     CreateGround(msystem);
-    CreateObject(msystem);
+    auto obj = CreateObject(msystem);
 
 #ifdef CHRONO_OPENGL
     // Initialize OpenGL
     opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
     gl_window.Initialize(1280, 720, title, msystem);
-    gl_window.SetCamera(ChVector<>(0, -10, 2), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1));
-    gl_window.SetRenderMode(opengl::SOLID);
+    gl_window.SetCamera(ChVector<>(0, -5, 2), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1));
+    gl_window.SetRenderMode(opengl::WIREFRAME);
 #endif
 
     // Run simulation for specified time.
@@ -275,11 +258,14 @@ int main(int argc, char* argv[]) {
             cout << "             Time:           " << time << endl;
             cout << "             Avg. contacts:  " << num_contacts / out_steps << endl;
             cout << "             Execution time: " << exec_time << endl;
-
+            cout << endl;
+            cout << obj->GetPos().z() << endl;
             out_frame++;
             next_out_frame += out_steps;
             num_contacts = 0;
         }
+
+        obj->SetRot(QUNIT);
 
 #ifdef CHRONO_OPENGL
         // OpenGL simulation step
