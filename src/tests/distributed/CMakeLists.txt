@@ -14,6 +14,7 @@ set(TESTS
     test_DISTR_geometry
     test_DISTR_hopper
     test_DISTR_plane
+	test_DISTR_slopeplane
 )
 
 # ------------------------------------------------------------------------------
