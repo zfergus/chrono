@@ -49,11 +49,7 @@ const std::string TerrainNodeDistr::m_checkpoint_filename = "checkpoint.dat";
 // - create the (distributed) Chrono system and set solver parameters
 // - create the OpenGL visualization window
 // -----------------------------------------------------------------------------
-TerrainNodeDistr::TerrainNodeDistr(Type type,
-                         int num_tires,
-                         bool use_checkpoint,
-                         bool render,
-                         int num_threads)
+TerrainNodeDistr::TerrainNodeDistr(Type type, int num_tires, bool use_checkpoint, bool render, int num_threads)
     : BaseNode("TERRAIN"),
       m_type(type),
       m_num_tires(num_tires),
@@ -827,35 +823,20 @@ void TerrainNodeDistr::UpdateNodeProxies(int which) {
 //    - linear and angular velocity: consistent with vertex velocities
 //    - contact shape: redefined to match vertex locations
 void TerrainNodeDistr::UpdateFaceProxies(int which) {
-    // TODO Create structure of displacements and corresponding array of gids
     ////void ChSystemDistributed::DistributeCosimPositions(CosimDispl* displacements, uint* GIDs, int* ranks, int size)
     ////m_system->DistributeCosimPositions(displacements, GIDs, ranks, size);
-
-    struct BodyState {
-        ChVector<> pos;
-        ChQuaternion<> rot;
-        ChVector<> pos_dt;
-        ChQuaternion<> rot_dt;
-    };
 
     std::vector<uint> gids;
     std::vector<BodyState> states;
     m_system->SetBodyStates(gids, states);
 
     std::vector<double> radii;
-    m_system->SetSphereShapes(gids, radii);
-
-
-    struct TriData {
-        ChVector<> v1;
-        ChVector<> v2;
-        ChVector<> v3;
-    };
+    std::vector<int> shape_idx;
+    m_system->SetSphereShapes(gids, shape_idx, radii);
 
     std::vector<TriData> new_shapes;
     std::vector<int> shape_idx;
     m_system->SetTriangleShapes(gids, shape_idx, new_shapes);
-
 
     /*
     // NOTE: All of this is done by the system in the above call.
@@ -921,9 +902,9 @@ void TerrainNodeDistr::ForcesNodeProxies(int which, std::vector<double>& vert_fo
 // Calculate barycentric coordinates (a1, a2, a3) for a given point P
 // with respect to the triangle with vertices {v1, v2, v3}
 ChVector<> TerrainNodeDistr::CalcBarycentricCoords(const ChVector<>& v1,
-                                              const ChVector<>& v2,
-                                              const ChVector<>& v3,
-                                              const ChVector<>& vP) {
+                                                   const ChVector<>& v2,
+                                                   const ChVector<>& v3,
+                                                   const ChVector<>& vP) {
     ChVector<> v12 = v2 - v1;
     ChVector<> v13 = v3 - v1;
     ChVector<> v1P = vP - v1;
@@ -948,12 +929,9 @@ ChVector<> TerrainNodeDistr::CalcBarycentricCoords(const ChVector<>& v1,
 // Collect contact forces on the (face) proxy bodies that are in contact.
 // Load mesh vertex forces and corresponding indices.
 void TerrainNodeDistr::ForcesFaceProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
+    std::vector<ChVector<double>> forces = m_system->GetBodyContactForces(m_tire_data[which].gids);
 
-    ////m_system->CollectCosimForces(m_tire_data[which].gids, count, forces);  // Collects forces onto master rank
-
-    auto forces = m_system->GetBodyContactForces(m_tire_data[which].gids);
-
-    if (m_system->GetMyRank() == MASTER) {
+    if (m_system->GetMyRank() == m_system->GetMasterRank()) {
         // Maintain an unordered map of vertex indices and associated contact forces.
         std::unordered_map<int, ChVector<>> my_map;
 

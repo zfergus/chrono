@@ -34,7 +34,6 @@
 namespace chrono {
 typedef struct CosimForce {
     uint gid;
-    int owner_rank;
     double force[3];
 } CosimForce;
 
@@ -67,6 +66,8 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Returns the number of the rank the system is running on.
     int GetMyRank() { return my_rank; }
+
+    int GetMasterRank() { return master_rank; }
 
     /// Returns the distance into the neighboring sub-domain that is considered shared.
     double GetGhostLayer() { return ghost_layer; }
@@ -171,12 +172,56 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// inconsistencies.
     void SanityCheck();
 
+    /// Stores all data needed to fully update the state of a body
+    typedef struct BodyState {
+        ChVector<> pos;
+        ChQuaternion<> rot;
+        ChVector<> pos_dt;
+        ChQuaternion<> rot_dt;
+    } BodyState;
+
+    /// Updates the states of all bodies listed in the gids parameter
+    /// Must be called on all system ranks and inputs must be complete and
+    /// valid on each rank.
+    void SetBodyStates(std::vector<uint> gids, std::vector<BodyState> states);
+
+    /// Updates each sphere shape associated with bodies with global ids gids.
+    /// shape_idx identifies the index of the shape within its body's collisionsystem
+    /// model.
+    /// Must be called on all system ranks and inputs must be complete and
+    /// valid on each rank.
+    void SetSphereShapes(std::vector<uint> gids, std::vector<int> shape_idx, std::vector<double> radii);
+    void SetSphereShape(uint gid, int shape_idx, double radius);
+
+    /// Structure of vertex data for a triangle in the bodies existing local frame
+    typedef struct TriData {
+        ChVector<double> v1;
+        ChVector<double> v2;
+        ChVector<double> v3;
+    } TriData;
+
+    /// Updates triangle shapes associated with bodies identified by gids.
+    /// shape_idx identifies the index of the shape within its body's collisionsystem
+    /// model.
+    /// Must be called on all system ranks and inputs must be complete and
+    /// valid on each rank.
+    void SetTriangleShapes(std::vector<uint> gids, std::vector<int> shape_idx, std::vector<TriData> new_shapes);
+    void SetTriangleShape(uint gid, int shape_idx, TriData new_shape);
+
+    /// Returns valid
+    /// Must be called on all system ranks and inputs must be complete and valid
+    /// on each rank.
+    std::vector<ChVector<double>>& GetBodyContactForces(std::vector<uint> gids);
+
   protected:
     /// Number of MPI ranks
     int num_ranks;
 
     /// MPI rank
     int my_rank;
+
+    /// Master MPI rank
+    int master_rank;
 
     /// Length into the neighboring sub-domain which is considered shared.
     double ghost_layer;
