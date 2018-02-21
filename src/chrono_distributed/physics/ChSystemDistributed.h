@@ -32,19 +32,6 @@
 #include "chrono_parallel/physics/ChSystemParallel.h"
 
 namespace chrono {
-typedef struct CosimForce {
-    uint gid;
-    double force[3];
-} CosimForce;
-
-/// Holds data exactly as it should appear in data_manager->shape_data
-typedef struct CosimDispl {
-    double A[3];
-    double B[3];
-    double C[3];
-    double R[4];
-    uint gid;
-} CosimDispl;
 
 class ChDomainDistributed;
 class ChCommDistributed;
@@ -148,20 +135,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// for debugging.
     void CheckIds();
 
-    // Co-Simulation
-    /// User functions for setting the range of GIDs that correspond to co-simulation triangles
-    void SetFirstCosimGID(uint gid);
-    void SetLastCosimGID(uint gid);
-
-    /// Tells the simulation to send all forces on co-simulation bodies to the master rank
-    /// Output: GIDS <- array of global IDS reporting force; forces <- array of corresponding forces
-    /// Call on all ranks - rank 0 returns valid count and fills forces arg
-    int CollectCosimForces(uint* GIDs, uint count, CosimForce* forces);
-
-    /// Updates the positions of all cosimulation bodies in the system
-    /// Call on all ranks?TODO
-    void DistributeCosimPositions(CosimDispl* displacements, uint* GIDs, int* ranks, int size);
-
     void AddBodyAllRanks(std::shared_ptr<ChBody> body);
 
     /// Removes all bodies below the given height - initial implementation of a
@@ -174,6 +147,9 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Stores all data needed to fully update the state of a body
     typedef struct BodyState {
+        BodyState(ChVector<>& p, ChQuaternion<>& r, ChVector<>& p_dt, ChQuaternion<>& r_dt)
+            : pos(p), rot(r), pos_dt(p_dt), rot_dt(r_dt){};
+
         ChVector<> pos;
         ChQuaternion<> rot;
         ChVector<> pos_dt;
@@ -183,7 +159,12 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Updates the states of all bodies listed in the gids parameter
     /// Must be called on all system ranks and inputs must be complete and
     /// valid on each rank.
+    /// NOTE: The change in position should be small in comparison to the ghost
+    /// layer of this system.
+    /// NOTE: The new states will reach the data_manager at the beginning of the
+    /// next time step.
     void SetBodyStates(std::vector<uint> gids, std::vector<BodyState> states);
+    void SetBodyState(uint gid, BodyState state);
 
     /// Updates each sphere shape associated with bodies with global ids gids.
     /// shape_idx identifies the index of the shape within its body's collisionsystem
@@ -208,10 +189,19 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     void SetTriangleShapes(std::vector<uint> gids, std::vector<int> shape_idx, std::vector<TriData> new_shapes);
     void SetTriangleShape(uint gid, int shape_idx, TriData new_shape);
 
-    /// Returns valid
+    /// Structure of force data used internally for MPI sending contact forces.
+    typedef struct internal_force {
+        uint gid;
+        double force[3];
+    } internal_force;
+
+    /// Returns a vector of pairs of gid and corresponding contact forces.
     /// Must be called on all system ranks and inputs must be complete and valid
     /// on each rank.
-    std::vector<ChVector<double>>& GetBodyContactForces(std::vector<uint> gids);
+    /// Returns a pair with gid == UINT_MAX if there are the gid if no contact
+    /// force is found.
+    std::vector<std::pair<uint, ChVector<>>> GetBodyContactForces(std::vector<uint> gids);
+    std::pair<uint, ChVector<>> GetBodyContactForce(uint gid);
 
   protected:
     /// Number of MPI ranks
@@ -244,8 +234,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     void AddBodyExchange(std::shared_ptr<ChBody> newbody, distributed::COMM_STATUS status);
 
     // Co-simulation
-    MPI_Datatype CosimForceType;
-    MPI_Datatype CosimDisplType;
+    MPI_Datatype InternalForceType;
 };
 
 } /* namespace chrono */
