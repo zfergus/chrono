@@ -10,13 +10,18 @@ endif()
 # ------------------------------------------------------------------------------
 
 set(TESTS
-    test_distributed_triangle
+    test_DISTR_triangle
     test_DISTR_geometry
     test_DISTR_hopper
     test_DISTR_plane
-	test_DISTR_slopeplane
-	test_DISTR_setstate
-	test_DISTR_getforces
+    test_DISTR_slopeplane
+    test_DISTR_setstate
+    test_DISTR_getforces
+)
+
+set(TESTS_OPENGL
+    test_DISTR_boundary_par
+    test_DISTR_slopeplane_par
 )
 
 # ------------------------------------------------------------------------------
@@ -34,6 +39,11 @@ set(LIBRARIES
     ChronoEngine_distributed
 )
 
+if(ENABLE_MODULE_OPENGL)
+    set(TESTS ${TESTS} ${TESTS_OPENGL})
+    include_directories(${CH_OPENGL_INCLUDES})
+    set(LIBRARIES ${LIBRARIES} ChronoEngine_opengl)
+endif()
 
 # ------------------------------------------------------------------------------
 # Add all executables

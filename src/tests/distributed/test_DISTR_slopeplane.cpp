@@ -13,6 +13,8 @@
 #include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
+#include "chrono_distributed/collision/ChBoundary.h"
+
 #include "chrono/utils/ChUtilsCreators.h"
 #include "chrono/utils/ChUtilsGenerators.h"
 #include "chrono/utils/ChUtilsSamplers.h"
@@ -114,7 +116,7 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
-void AddSlopedWall(ChSystemDistributed* sys, ChPlaneCB** wall) {
+void AddSlopedWall(ChSystemDistributed* sys) {
     int binId = -200;
 
     auto mat = std::make_shared<ChMaterialSurfaceSMC>();
@@ -136,12 +138,14 @@ void AddSlopedWall(ChSystemDistributed* sys, ChPlaneCB** wall) {
     ChVector<double> n = u.Cross(w);
 
     // Sloped wall
-    *wall = new ChPlaneCB(sys, container.get(), center, u, w, n);
-
-    sys->RegisterCustomCollisionCallback(*wall);
+    ////auto wall = new ChPlaneCB(sys, container.get(), center, u, w, n);
+    ////sys->RegisterCustomCollisionCallback(wall);
 
     sys->AddBodyAllRanks(container);
     sys->IncrementGID();
+
+    auto boundary = new ChBoundary(container);
+    boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)), ChVector2<>(1, 1));
 }
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
@@ -205,6 +209,15 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 
+#ifdef _DEBUG
+    if (my_rank == 0) {
+        int foo;
+        std::cout << "Enter something to continue..." << std::endl;
+        std::cin >> foo;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
     // Parse program arguments
     int num_threads;
     double time_end;
@@ -218,12 +231,6 @@ int main(int argc, char* argv[]) {
     }
 
     dx = height / std::tan(slope_angle);
-    // if (my_rank == 0) {
-    // 	int foo;
-    // 	std::cout << "Enter something too continue..." << std::endl;
-    // 	std::cin >> foo;
-    // }
-    // MPI_Barrier(MPI_COMM_WORLD);
 
     // Output directory and files
     std::ofstream outfile;
@@ -313,10 +320,9 @@ int main(int argc, char* argv[]) {
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
     // Create objects
-    ChPlaneCB* wall;
-
-    AddSlopedWall(&my_sys, &wall);
+    AddSlopedWall(&my_sys);
     auto actual_num_bodies = AddFallingBalls(&my_sys);
+
     MPI_Barrier(my_sys.GetMPIWorld());
 
     if (my_rank == MASTER)
