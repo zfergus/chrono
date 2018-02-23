@@ -931,6 +931,16 @@ ChVector<> TerrainNodeDistr::CalcBarycentricCoords(const ChVector<>& v1,
 void TerrainNodeDistr::ForcesFaceProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices) {
     std::vector<ChVector<double>> forces = m_system->GetBodyContactForces(m_tire_data[which].gids);
 
+
+    struct ContactForce_Internal {
+        uint gid;
+        double force[3];
+    };
+
+
+
+    std::vector<std::pair<uint, ChVector<>>> frc = m_system->GetBodyContactForces(m_tire_data[which].gids);
+
     if (m_system->GetMyRank() == m_system->GetMasterRank()) {
         // Maintain an unordered map of vertex indices and associated contact forces.
         std::unordered_map<int, ChVector<>> my_map;
