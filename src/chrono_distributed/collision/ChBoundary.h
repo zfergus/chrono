@@ -36,6 +36,10 @@ class CH_DISTR_API ChBoundary : public ChSystem::CustomCollisionCallback {
                   const ChVector2<>& lengths  ///< X-Y extent
     );
 
+    /// Update all collision planes.  
+    /// This function should be called if the position of the associated body is modified.
+    void Update();
+
     /// Override the position of the specified collision plane.
     void UpdatePlane(size_t id,              ///< plane index
                      const ChFrame<>& frame  ///< plane reference frame, relative to associated body

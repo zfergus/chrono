@@ -31,6 +31,15 @@ void ChBoundary::AddPlane(const ChFrame<>& frame, const ChVector2<>& lengths) {
     m_planes.push_back(Plane(frame, frame_abs, lengths));
 }
 
+void ChBoundary::Update() {
+    for (auto& plane : m_planes) {
+        ChFrame<> frame_abs;
+        m_body->ChFrame<>::TransformLocalToParent(plane.m_frame_loc, frame_abs);
+        plane.m_frame = frame_abs;
+        plane.m_normal = frame_abs.GetA().Get_A_Zaxis();
+    }
+}
+
 void ChBoundary::UpdatePlane(size_t id, const ChFrame<>& frame) {
     assert(id >= 0 && id < m_planes.size());
     ChFrame<> frame_abs;
