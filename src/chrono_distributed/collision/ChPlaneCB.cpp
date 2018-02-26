@@ -120,7 +120,8 @@ void ChPlaneCB::CheckSphereProfile(std::shared_ptr<ChBody> sphere) {
 
     contact.modelA = m_body->GetCollisionModel().get();
     contact.modelB = sphere->GetCollisionModel().get();
-    m_sys->data_manager->host_data.erad_rigid_rigid.push_back(radius);
+
+    contact.eff_radius = radius;
 
     m_sys->GetContactContainer()->AddContact(contact);  // NOTE: Not thread-safe
 }

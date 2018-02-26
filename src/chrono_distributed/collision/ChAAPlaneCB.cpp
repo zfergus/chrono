@@ -136,8 +136,7 @@ void ChAAPlaneCB::CheckSphereProfile(std::shared_ptr<ChBody> sphere) {
     contact.vpA = vpA;
     contact.vpB = vpB;
     contact.distance = delta - radius;
-
-    m_sys->data_manager->host_data.erad_rigid_rigid.push_back(radius);
+    contact.eff_radius = radius;
 
     m_sys->GetContactContainer()->AddContact(contact);  // NOTE: Not thread-safe
 }

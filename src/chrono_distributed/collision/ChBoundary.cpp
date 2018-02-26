@@ -133,10 +133,10 @@ void ChBoundary::CheckSpherePlane(std::shared_ptr<collision::ChCollisionModel> m
     contact.vpA = center - P.z() * plane.m_normal;
     contact.vpB = center - radius * plane.m_normal;
     contact.distance = depth;
+    contact.eff_radius = radius;
 
     auto sys = static_cast<ChSystemParallel*>(m_body->GetSystem());
     sys->GetContactContainer()->AddContact(contact);
-    sys->data_manager->host_data.erad_rigid_rigid.push_back(radius);
 
     m_crt_count++;
 }
