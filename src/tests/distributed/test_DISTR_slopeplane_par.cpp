@@ -45,7 +45,7 @@ using namespace chrono::collision;
 float Y = 2e6f;
 float mu = 0.4f;
 float cr = 0.05f;
-double gran_radius = 0.0025;
+double gran_radius = 0.025;
 double rho = 1000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
@@ -59,7 +59,7 @@ double time_step = 2e-5;
 unsigned int max_iteration = 100;  // not relevant here (SMC, no joints)
 double tolerance = 1e-4;           // not relevant here (SMC, no joints)
 
-void AddSlopedWall(ChSystemParallel* sys) {
+std::shared_ptr<ChBoundary> AddSlopedWall(ChSystemParallel* sys) {
     int binId = -200;
 
     auto mat = std::make_shared<ChMaterialSurfaceSMC>();
@@ -78,10 +78,12 @@ void AddSlopedWall(ChSystemParallel* sys) {
 
     sys->AddBody(container);
 
-    auto boundary = new ChBoundary(container);
+    auto boundary = std::shared_ptr<ChBoundary>(new ChBoundary(container));
     boundary->AddPlane(ChFrame<>(ChVector<>(0, 0, 0), Q_from_AngY(-slope_angle)),
                        ChVector2<>(100 * gran_radius, 100 * gran_radius));
     boundary->AddVisualization(3 * gran_radius);
+
+    return boundary;
 }
 
 size_t AddFallingBalls(ChSystemParallel* sys) {
@@ -149,7 +151,7 @@ int main(int argc, char* argv[]) {
     sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
     // Create objects
-    AddSlopedWall(&sys);
+    auto boundary = AddSlopedWall(&sys);
     auto actual_num_bodies = AddFallingBalls(&sys);
     std::cout << "Created " << actual_num_bodies << " balls." << std::endl;
 

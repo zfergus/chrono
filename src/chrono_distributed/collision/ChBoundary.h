@@ -56,6 +56,9 @@ class CH_DISTR_API ChBoundary : public ChSystem::CustomCollisionCallback {
     /// Return the current number of collisions.
     int GetNContacts() const { return m_crt_count; }
 
+    /// Return the associated body.
+    std::shared_ptr<ChBody> GetBody() const { return m_body; }
+
   private:
     struct Plane {
         Plane(const ChFrame<>& frame_loc, const ChFrame<>& frame, const ChVector2<>& lengths);
