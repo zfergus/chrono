@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
-#include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "chrono_distributed/collision/ChBoundary.h"
@@ -136,10 +135,6 @@ void AddSlopedWall(ChSystemDistributed* sys) {
     ChVector<double> u(dx / 2.0, 0, height / 2.0);
     ChVector<double> w(0, hy, 0);
     ChVector<double> n = u.Cross(w);
-
-    // Sloped wall
-    ////auto wall = new ChPlaneCB(sys, container.get(), center, u, w, n);
-    ////sys->RegisterCustomCollisionCallback(wall);
 
     sys->AddBodyAllRanks(container);
     sys->IncrementGID();

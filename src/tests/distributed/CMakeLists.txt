@@ -10,10 +10,8 @@ endif()
 # ------------------------------------------------------------------------------
 
 set(TESTS
-    test_DISTR_triangle
     test_DISTR_geometry
     test_DISTR_hopper
-    test_DISTR_plane
     test_DISTR_slopeplane
     test_DISTR_setstate
     test_DISTR_getforces

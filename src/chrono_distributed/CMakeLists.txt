@@ -92,8 +92,6 @@ SET(ChronoEngine_distributed_COLLISION
 	collision/ChCollisionSystemDistributed.h
 	collision/ChCollisionModelDistributed.cpp
 	collision/ChCollisionSystemDistributed.cpp
-	collision/ChAAPlaneCB.cpp
-	collision/ChPlaneCB.cpp
 	collision/ChBoundary.h
 	collision/ChBoundary.cpp
     )

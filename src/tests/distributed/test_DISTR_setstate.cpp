@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
-#include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "chrono/utils/ChUtilsCreators.h"
@@ -80,6 +79,7 @@ double tolerance = 1e-4;
 // Test
 uint target_body = 0;     // Body that will be updated for the test
 double state_time = 0.5;  // Time at which the update will occur
+// Updated State
 ChVector<> pos(hx / 3.0, hy / 3.0, hz / 3.0);
 ChQuaternion<> rot(1, 0, 0, 0);
 ChVector<> pos_dt(0.5, 0.5, 0.5);

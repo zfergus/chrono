@@ -9,8 +9,8 @@
 #include <memory>
 #include <vector>
 
+#include "chrono_distributed/collision/ChBoundary.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
-#include "chrono_distributed/collision/ChPlaneCB.cpp"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "chrono/utils/ChUtilsCreators.h"
@@ -63,11 +63,11 @@ double rho = 4000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
               gran_radius;  // TODO shape dependent: more complicated than you'd think...
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
-double spacing = 2.5 * gran_radius;  // Distance between adjacent centers of particles
+double spacing = 4.0 * gran_radius;  // Distance between adjacent centers of particles
 
 // Dimensions TODO
-double hy = 10 * gran_radius;             // Half y dimension
-double height = 100 * gran_radius;        // Height of the box
+double hy = 20 * gran_radius;             // Half y dimension
+double height = 50 * gran_radius;         // Height of the box
 double slope_angle = CH_C_PI / 8.0;       // Angle of sloped wall from the horizontal
 double settling_gap = 0.0 * gran_radius;  // Width of opening of the hopper during settling phase
 int split_axis = 1;                       // Split domain along y axis
@@ -120,12 +120,7 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
-void AddContainer(ChSystemDistributed* sys,
-                  ChPlaneCB** low_x_wall,
-                  ChPlaneCB** high_x_wall,
-                  ChPlaneCB** low_y_wall,
-                  ChPlaneCB** high_y_wall) {
-    // TODO Any of this body stuff needed for custom collision?
+void AddContainer(ChSystemDistributed* sys) {
     int binId = -200;
 
     auto mat = std::make_shared<ChMaterialSurfaceSMC>();
@@ -133,41 +128,29 @@ void AddContainer(ChSystemDistributed* sys,
     mat->SetFriction(mu);
     mat->SetRestitution(cr);
 
-    auto container = std::make_shared<ChBody>(std::make_shared<ChCollisionModelDistributed>(), ChMaterialSurface::SMC);
-    container->SetMaterialSurface(mat);
-    container->SetMass(1);
-    container->SetPos(ChVector<>(0));
-    container->SetCollide(false);
-    container->SetBodyFixed(true);
-    container->GetCollisionModel()->ClearModel();
+    auto bin = std::make_shared<ChBody>(std::make_shared<ChCollisionModelParallel>(), ChMaterialSurface::SMC);
+    bin->SetMaterialSurface(mat);
+    bin->SetIdentifier(binId);
+    bin->SetMass(1);
+    bin->SetPos(ChVector<>(0, 0, 0));
+    bin->SetCollide(true);
+    bin->SetBodyFixed(true);
+    sys->AddBodyAllRanks(bin);
+    sys->IncrementGID();
 
-    // Veritcal wall
-    *low_x_wall = new ChPlaneCB(sys, container.get(), ChVector<>(0, 0, height / 2.0), ChVector<>(0, 0, height / 2.0),
-                                ChVector<>(0, hy, 0), ChVector<>(1, 0, 0));
+    auto cb = new ChBoundary(bin);
+    // Sloped Wall
+    cb->AddPlane(ChFrame<>(ChVector<>(settling_gap + dx / 2.0, 0, height / 2.0), Q_from_AngY(-slope_angle)),
+                 ChVector2<>(std::sqrt(dx * dx + height * height), 2.0 * hy));
 
-    ChVector<double> center(settling_gap + dx / 2.0, 0, height / 2.0);
-    ChVector<double> u(dx / 2.0, 0, height / 2.0);
-    ChVector<double> w(0, hy, 0);
-    ChVector<double> n = u.Cross(w);
-
-    // Sloped wall
-    *high_x_wall = new ChPlaneCB(sys, container.get(), center, u, w, n);
+    // Vertical wall
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
 
     // Parallel vertical walls
-    *low_y_wall = new ChPlaneCB(sys, container.get(), ChVector<double>((settling_gap + dx) / 2.0, -hy, height / 2.0),
-                                ChVector<double>((settling_gap + dx) / 2.0, 0, 0), ChVector<double>(0, 0, height / 2.0),
-                                ChVector<double>(0, 1, 0));
-    *high_y_wall = new ChPlaneCB(sys, container.get(), ChVector<double>((settling_gap + dx) / 2.0, hy, height / 2.0),
-                                 ChVector<double>((settling_gap + dx) / 2.0, 0, 0),
-                                 ChVector<double>(0, 0, height / 2.0), ChVector<double>(0, -1, 0));
-
-    sys->RegisterCustomCollisionCallback(*low_x_wall);
-    sys->RegisterCustomCollisionCallback(*high_x_wall);
-    sys->RegisterCustomCollisionCallback(*low_y_wall);
-    sys->RegisterCustomCollisionCallback(*high_y_wall);
-
-    sys->AddBodyAllRanks(container);
-    sys->IncrementGID();
+    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2.0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)),
+                 ChVector2<>(settling_gap + dx, height));
+    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2.0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)),
+                 ChVector2<>(settling_gap + dx, height));
 }
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
@@ -341,13 +324,7 @@ int main(int argc, char* argv[]) {
     if (verbose)
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
-    // Create objects
-    ChPlaneCB* low_x_wall;
-    ChPlaneCB* high_x_wall;
-    ChPlaneCB* low_y_wall;
-    ChPlaneCB* high_y_wall;
-
-    AddContainer(&my_sys, &low_x_wall, &high_x_wall, &low_y_wall, &high_y_wall);
+    AddContainer(&my_sys);
     auto actual_num_bodies = AddFallingBalls(&my_sys);
     MPI_Barrier(my_sys.GetMPIWorld());
 
@@ -382,18 +359,10 @@ int main(int argc, char* argv[]) {
         time += time_step;
 
         if (i % out_steps == 0) {
-            // if (settling && my_sys.GetHighestZ() <= settled_height) {
-            //     high_x_wall->SetPos(high_x_wall->GetPos() + ChVector<>(pouring_gap, 0, 0));
-            //     if (my_rank == MASTER) {
-            //         std::cout << "Done Settling" << std::endl;
-            //     }
-            //     settling = false;
-            // }
             if (settling && time >= 0.5) {
                 settling = false;
-                high_x_wall->SetPos(high_x_wall->GetPos() + ChVector<>(pouring_gap, 0, 0));
+                // TODO:    high_x_wall->SetPos(high_x_wall->GetPos() + ChVector<>(pouring_gap, 0, 0));
             }
-            // Remove fallen bodies
             if (my_rank == MASTER)
                 std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
             if (output_data) {

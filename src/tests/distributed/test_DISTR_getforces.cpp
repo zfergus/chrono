@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "chrono_distributed/collision/ChAAPlaneCB.cpp"
+#include "chrono_distributed/collision/ChBoundary.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
 
@@ -54,9 +54,6 @@ bool GetProblemSpecs(int argc,
                      int rank,
                      int& num_threads,
                      double& time_end,
-                     double& h_x,
-                     double& h_y,
-                     double& h_z,
                      bool& monitor,
                      bool& verbose,
                      bool& output_data,
@@ -71,15 +68,15 @@ float cr = 0.05f;
 double gran_radius = 0.00125;  // 1.25mm radius
 double rho = 4000;
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
+double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
+ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
 
 // Dimensions
 double lowest_layer = 2 * spacing;  // Lowest possible CENTER of body
 int extra_container_layers = 3;
-
-// Oscillation
-double period = 0.5;                 // TODO adjust
-double amplitude = gran_radius * 5;  // TODO adjust
-double lower_start;
+double hx = -1.0;
+double hy = -1.0;
+double height = -1.0;
 
 // Simulation
 double time_step = 7e-5;
@@ -126,17 +123,7 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
-void AddContainer(ChSystemDistributed* sys,
-                  double h_x,
-                  double h_y,
-                  double height,
-                  ChAAPlaneCB** bottom_wall,
-                  ChAAPlaneCB** top_wall,
-                  ChAAPlaneCB** low_x_wall,
-                  ChAAPlaneCB** high_x_wall,
-                  ChAAPlaneCB** low_y_wall,
-                  ChAAPlaneCB** high_y_wall) {
-    // TODO Any of this body stuff needed for custom collision?
+void AddContainer(ChSystemDistributed* sys) {
     int binId = -200;
 
     auto mat = std::make_shared<ChMaterialSurfaceSMC>();
@@ -144,37 +131,28 @@ void AddContainer(ChSystemDistributed* sys,
     mat->SetFriction(mu);
     mat->SetRestitution(cr);
 
-    auto container = std::make_shared<ChBody>(std::make_shared<ChCollisionModelDistributed>(), ChMaterialSurface::SMC);
-    container->SetMaterialSurface(mat);
-    container->SetMass(1);
-    container->SetPos(ChVector<>(0));
-    container->SetCollide(false);
-    container->SetBodyFixed(true);
-    container->GetCollisionModel()->ClearModel();
-
-    lower_start = -h_x - gran_radius;
-    // TODO little extra space on sides
-    *bottom_wall =
-        new ChAAPlaneCB(sys, container.get(), 2, 0, ChVector<>(0, 0, 1), -2 * h_x, 2 * h_x, -2 * h_y, 2 * h_y);
-    *top_wall = new ChAAPlaneCB(sys, container.get(), 2, 1.25 * height, ChVector<>(0, 0, -1), -2 * h_x, 2 * h_x,
-                                -2 * h_y, 2 * h_y);
-    *low_x_wall = new ChAAPlaneCB(sys, container.get(), 0, lower_start, ChVector<>(1, 0, 0), -2 * h_y, 2 * h_y, -height,
-                                  2 * height);
-    *high_x_wall =
-        new ChAAPlaneCB(sys, container.get(), 0, h_x, ChVector<>(-1, 0, 0), -2 * h_y, 2 * h_y, -height, 2 * height);
-    *low_y_wall = new ChAAPlaneCB(sys, container.get(), 1, -h_y - gran_radius, ChVector<>(0, 1, 0), -2 * h_x, 2 * h_x,
-                                  -height, 2 * height);
-    *high_y_wall =
-        new ChAAPlaneCB(sys, container.get(), 1, h_y, ChVector<>(0, -1, 0), -2 * h_x, 2 * h_x, -height, 2 * height);
-
-    sys->RegisterCustomCollisionCallback(*bottom_wall);
-    sys->RegisterCustomCollisionCallback(*low_x_wall);
-    sys->RegisterCustomCollisionCallback(*high_x_wall);
-    sys->RegisterCustomCollisionCallback(*low_y_wall);
-    sys->RegisterCustomCollisionCallback(*high_y_wall);
-
-    sys->AddBodyAllRanks(container);
+    auto bin = std::make_shared<ChBody>(std::make_shared<ChCollisionModelParallel>(), ChMaterialSurface::SMC);
+    bin->SetMaterialSurface(mat);
+    bin->SetIdentifier(binId);
+    bin->SetMass(1);
+    bin->SetPos(ChVector<>(0, 0, 0));
+    bin->SetCollide(true);
+    bin->SetBodyFixed(true);
+    sys->AddBodyAllRanks(bin);
     sys->IncrementGID();
+
+    auto cb = new ChBoundary(bin);
+    // Floor
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, 0), QUNIT), ChVector2<>(2.0 * hx, 2.0 * hy));
+    // low x
+    cb->AddPlane(ChFrame<>(ChVector<>(-hx, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
+    // high x
+    cb->AddPlane(ChFrame<>(ChVector<>(hx, 0, height / 2.0), Q_from_AngY(-CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
+
+    // low y
+    cb->AddPlane(ChFrame<>(ChVector<>(0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)), ChVector2<>(2.0 * hx, height));
+    // high y
+    cb->AddPlane(ChFrame<>(ChVector<>(0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)), ChVector2<>(2.0 * hx, height));
 }
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
@@ -200,9 +178,10 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
     return ball;
 }
 
-size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double gran_height) {
-    ChVector<double> box_center(0, 0, lowest_layer + gran_height / 2);
-    ChVector<double> half_dims(h_x - spacing / 2.0, h_y - spacing / 2.0, gran_height / 2.0001);
+size_t AddFallingBalls(ChSystemDistributed* sys) {
+    double lowest = 3.0 * spacing;
+    ChVector<double> box_center(0, 0, lowest + (height - lowest) / 2.0);
+    ChVector<double> half_dims(hx - spacing, hy - spacing, (height - lowest) / 2.0);
 
     utils::GridSampler<> sampler(spacing);
     // utils::HCPSampler<> sampler(gran_radius * 2.0);
@@ -217,8 +196,6 @@ size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double 
 
     // Create the falling balls
     int ballId = 0;
-    double mass = rho * 4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius;
-    ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
     for (int i = 0; i < points.size(); i++) {
         if (sys->InSub(points[i])) {
             auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
@@ -228,12 +205,7 @@ size_t AddFallingBalls(ChSystemDistributed* sys, double h_x, double h_y, double 
         break;  // Add only one ball
     }
 
-    return points.size();
-}
-
-// TODO need to expand domain decomp
-double GetLowerWallPos(double cur_time) {
-    return amplitude * std::sin(cur_time * 2 * CH_C_PI / period) + lower_start;
+    return 1;
 }
 
 int main(int argc, char* argv[]) {
@@ -246,15 +218,11 @@ int main(int argc, char* argv[]) {
     // Parse program arguments
     int num_threads;
     double time_end;
-    double h_x;
-    double h_y;
-    double h_z;
     std::string outdir;
     bool verbose;
     bool monitor;
     bool output_data;
-    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, h_x, h_y, h_z, monitor, verbose, output_data,
-                         outdir)) {
+    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, monitor, verbose, output_data, outdir)) {
         MPI_Finalize();
         return 1;
     }
@@ -292,7 +260,7 @@ int main(int argc, char* argv[]) {
 
     if (verbose && my_rank == MASTER) {
         std::cout << "Number of threads:          " << num_threads << std::endl;
-        std::cout << "Domain:                     " << 2 * h_x << " x " << 2 * h_y << " x " << 2 * h_z << std::endl;
+        std::cout << "Domain:                     " << 2 * hx << " x " << 2 * hy << " x " << 2 * height << std::endl;
         std::cout << "Simulation length:          " << time_end << std::endl;
         std::cout << "Monitor?                    " << monitor << std::endl;
         std::cout << "Output?                     " << output_data << std::endl;
@@ -300,24 +268,8 @@ int main(int argc, char* argv[]) {
             std::cout << "Output directory:           " << outdir << std::endl;
     }
 
-    // Simple Cubic packing density computations:
-    double open_X = 2 * h_x;
-    double open_Y = 2 * h_y;
-    double open_Z = 2 * h_z;
-    int count_X = (int)(open_X / spacing);
-    int count_Y = (int)(open_Y / spacing);
-    int count_Z = (int)(open_Z / spacing);
-    int balls_per_layer = count_X * count_Y;
-    double gran_height = count_Z * spacing;
-
-    // Hexagonal Close packing
-    // double volume_needed = (4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius * num_bodies) / 0.74;
-    // double gran_height = volume_needed / (h_x * h_y * 4);
-
-    double height = lowest_layer + gran_height + extra_container_layers * spacing;
-
     // Create distributed system
-    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2, balls_per_layer * count_Z);  // TODO
+    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2, 100000);  // TODO
 
     if (verbose) {
         if (my_rank == MASTER)
@@ -331,8 +283,8 @@ int main(int argc, char* argv[]) {
     my_sys.Set_G_acc(ChVector<double>(-1.0, 0.0, -9.8));
 
     // Domain decomposition
-    ChVector<double> domlo(-h_x - amplitude, -h_y, -0.0001);
-    ChVector<double> domhi(h_x + amplitude, h_y, height + 0.0001);
+    ChVector<double> domlo(-hx, -hy, -2.0 * gran_radius);
+    ChVector<double> domhi(hx, hy, height + 3 * gran_radius);
     my_sys.GetDomain()->SetSplitAxis(1);  // Split along the y-axis
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
 
@@ -367,17 +319,8 @@ int main(int argc, char* argv[]) {
     if (verbose)
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
-    // Create objects
-    ChAAPlaneCB* bottom_wall;
-    ChAAPlaneCB* top_wall;
-    ChAAPlaneCB* low_x_wall;
-    ChAAPlaneCB* high_x_wall;
-    ChAAPlaneCB* low_y_wall;
-    ChAAPlaneCB* high_y_wall;
-
-    AddContainer(&my_sys, h_x, h_y, height, &bottom_wall, &top_wall, &low_x_wall, &high_x_wall, &low_y_wall,
-                 &high_y_wall);
-    auto actual_num_bodies = AddFallingBalls(&my_sys, h_x, h_y, gran_height);
+    AddContainer(&my_sys);
+    auto actual_num_bodies = AddFallingBalls(&my_sys);
     MPI_Barrier(my_sys.GetMPIWorld());
     if (my_rank == MASTER)
         std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
@@ -416,9 +359,6 @@ int main(int argc, char* argv[]) {
                 out_frame++;
             }
         }
-        // double lower_wall_pos = GetLowerWallPos(time);
-        // low_x_wall->SetPos(lower_wall_pos);
-        // high_x_wall->SetPos(lower_wall_pos + 2 * h_x);
 
         // my_sys.SanityCheck();
         if (monitor)
@@ -441,9 +381,6 @@ bool GetProblemSpecs(int argc,
                      int rank,
                      int& num_threads,
                      double& time_end,
-                     double& h_x,
-                     double& h_y,
-                     double& h_z,
                      bool& monitor,
                      bool& verbose,
                      bool& output_data,
@@ -451,9 +388,6 @@ bool GetProblemSpecs(int argc,
     // Initialize parameters.
     num_threads = -1;
     time_end = -1;
-    h_x = -1;
-    h_y = -1;
-    h_z = -1;
     verbose = false;
     monitor = false;
     output_data = false;
@@ -489,15 +423,15 @@ bool GetProblemSpecs(int argc,
                 break;
 
             case OPT_X:
-                h_x = std::stod(args.OptionArg()) / 2.0;
+                hx = std::stod(args.OptionArg()) / 2.0;
                 break;
 
             case OPT_Y:
-                h_y = std::stod(args.OptionArg()) / 2.0;
+                hy = std::stod(args.OptionArg()) / 2.0;
                 break;
 
             case OPT_Z:
-                h_z = std::stod(args.OptionArg()) / 2.0;
+                height = std::stod(args.OptionArg()) / 2.0;
                 break;
 
             case OPT_TIME:
@@ -515,7 +449,7 @@ bool GetProblemSpecs(int argc,
     }
 
     // Check that required parameters were specified
-    if (num_threads == -1 || time_end <= 0 || h_x < 0 || h_y < 0 || h_z < 0) {
+    if (num_threads == -1 || time_end <= 0 || hx < 0 || hy < 0 || height < 0) {
         if (rank == MASTER) {
             std::cout << "Invalid parameter or missing required parameter." << std::endl;
             ShowUsage();
