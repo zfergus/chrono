@@ -14,6 +14,7 @@
 
 #include "chrono_distributed/collision/ChBoundary.h"
 
+#include "chrono/ChConfig.h"
 #include "chrono/utils/ChUtilsCreators.h"
 #include "chrono/utils/ChUtilsGenerators.h"
 #include "chrono/utils/ChUtilsSamplers.h"
@@ -25,13 +26,17 @@
 
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
+#ifdef CHRONO_OPENGL
+#include "chrono_opengl/ChOpenGLWindow.h"
+#endif
+
 using namespace chrono;
 using namespace chrono::collision;
 
 #define MASTER 0
 
 // ID values to identify command line arguments
-enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE };
+enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE, OPT_RENDER };
 
 // Table of CSimpleOpt::Soption structures. Each entry specifies:
 // - the ID for the option (returned from OptionId() during processing)
@@ -41,7 +46,7 @@ enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE
 CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
                                     {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_TIME, "-t", SO_REQ_CMB},
                                     {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
+                                    {OPT_VERBOSE, "-v", SO_NONE},    {OPT_RENDER, "-r", SO_NONE}, SO_END_OF_OPTIONS };
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -50,6 +55,7 @@ bool GetProblemSpecs(int argc,
                      double& time_end,
                      bool& monitor,
                      bool& verbose,
+                     bool& render,
                      bool& output_data,
                      std::string& outdir);
 
@@ -59,7 +65,7 @@ void ShowUsage();
 float Y = 2e6f;
 float mu = 0.4f;
 float cr = 0.05f;
-double gran_radius = 0.0025;  // 2.5mm radius
+double gran_radius = 0.025;
 double rho = 4000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
               gran_radius;  // TODO shape dependent: more complicated than you'd think...
@@ -140,7 +146,8 @@ void AddSlopedWall(ChSystemDistributed* sys) {
     sys->IncrementGID();
 
     auto boundary = new ChBoundary(container);
-    boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)), ChVector2<>(1, 1));
+    boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)), ChVector2<>(100 * gran_radius, 100 * gran_radius));
+    boundary->AddVisualization(3 * gran_radius);
 }
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
@@ -218,9 +225,10 @@ int main(int argc, char* argv[]) {
     double time_end;
     std::string outdir;
     bool verbose;
+    bool render;
     bool monitor;
     bool output_data;
-    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, monitor, verbose, output_data, outdir)) {
+    if (!GetProblemSpecs(argc, argv, my_rank, num_threads, time_end, monitor, verbose, render, output_data, outdir)) {
         MPI_Finalize();
         return 1;
     }
@@ -235,8 +243,8 @@ int main(int argc, char* argv[]) {
             bool out_dir_exists = filesystem::path(outdir).exists();
             if (out_dir_exists) {
                 std::cout << "Output directory already exists" << std::endl;
-                MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
-                return 1;
+                ////MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
+                ////return 1;
             } else if (filesystem::create_directory(filesystem::path(outdir))) {
                 if (verbose) {
                     std::cout << "Create directory = " << filesystem::path(outdir).make_absolute() << std::endl;
@@ -331,6 +339,16 @@ int main(int argc, char* argv[]) {
     if (verbose)
         std::cout << "Rank: " << my_rank << "  Output file name: " << out_file_name << std::endl;
 
+#ifdef CHRONO_OPENGL
+    // Create the visualization window
+    if (render && my_rank == MASTER) {
+        opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+        gl_window.Initialize(1280, 720, "Slope plane test", &my_sys);
+        gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, height), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.01f);
+        gl_window.SetRenderMode(opengl::WIREFRAME);
+    }
+#endif
+
     // Run simulation for specified time
     int num_steps = (int)std::ceil(time_end / time_step);
     int out_steps = (int)std::ceil((1 / time_step) / out_fps);
@@ -344,6 +362,18 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_steps; i++) {
         my_sys.DoStepDynamics(time_step);
         time += time_step;
+
+#ifdef CHRONO_OPENGL
+        if (render && my_rank == MASTER) {
+            opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+            if (gl_window.Active()) {
+                gl_window.Render();
+            } else {
+                MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
+                return 0;
+            }
+        }
+#endif
 
         if (i % out_steps == 0) {
             if (my_rank == MASTER)
@@ -377,12 +407,14 @@ bool GetProblemSpecs(int argc,
                      double& time_end,
                      bool& monitor,
                      bool& verbose,
+                     bool& render,
                      bool& output_data,
                      std::string& outdir) {
     // Initialize parameters.
     num_threads = -1;
     time_end = -1;
     verbose = false;
+    render = false;
     monitor = false;
     output_data = false;
 
@@ -427,6 +459,10 @@ bool GetProblemSpecs(int argc,
             case OPT_VERBOSE:
                 verbose = true;
                 break;
+
+            case OPT_RENDER:
+                render = true;
+                break;
         }
     }
 
@@ -449,5 +485,6 @@ void ShowUsage() {
     std::cout << "-o=<outdir>     Output directory (must not exist)" << std::endl;
     std::cout << "-m              Enable performance monitoring (default: false)" << std::endl;
     std::cout << "-v              Enable verbose output (default: false)" << std::endl;
+    std::cout << "-r              Render simulation on MASTER rank (default: false)" << std::endl;
     std::cout << "-h              Print usage help" << std::endl;
 }
