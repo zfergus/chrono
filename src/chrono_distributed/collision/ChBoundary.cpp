@@ -14,7 +14,6 @@
 
 #include <cmath>
 
-#include "chrono/assets/ChBoxShape.h"
 #include "chrono_distributed/collision/ChBoundary.h"
 
 namespace chrono {
@@ -47,23 +46,41 @@ void ChBoundary::UpdatePlane(size_t id, const ChFrame<>& frame) {
     m_planes[id].m_frame_loc = frame;
     m_planes[id].m_frame = frame_abs;
     m_planes[id].m_normal = frame_abs.GetA().Get_A_Zaxis();
+
+    if (m_planes[id].m_vis_box) {
+        double hthick = m_planes[id].m_vis_box->GetBoxGeometry().Size.z();
+        ChVector<> normal = m_planes[id].m_frame_loc.GetA().Get_A_Zaxis();
+        m_planes[id].m_vis_box->Pos = m_planes[id].m_frame_loc.GetPos() - normal * hthick;
+        m_planes[id].m_vis_box->Rot = m_planes[id].m_frame_loc.GetRot();
+    }
 }
 
 void ChBoundary::UpdatePlane(size_t id, const ChVector2<>& lengths) {
     assert(id >= 0 && id < m_planes.size());
     m_planes[id].m_hlen = lengths * 0.5;
+
+    if (m_planes[id].m_vis_box) {
+        double hthick = m_planes[id].m_vis_box->GetBoxGeometry().Size.z();
+        ChVector<> hlen(m_planes[id].m_hlen.x(), m_planes[id].m_hlen.y(), hthick);
+        m_planes[id].m_vis_box->GetBoxGeometry().Size = hlen;
+    }
+}
+
+void ChBoundary::AddVisualization(size_t id, double thickness) {
+    double hthick = thickness / 2;
+    ChVector<> hlen(m_planes[id].m_hlen.x(), m_planes[id].m_hlen.y(), hthick);
+    ChVector<> normal = m_planes[id].m_frame_loc.GetA().Get_A_Zaxis();
+    auto box = std::make_shared<ChBoxShape>();
+    box->GetBoxGeometry().Size = hlen;
+    box->Pos = m_planes[id].m_frame_loc.GetPos() - normal * hthick;
+    box->Rot = m_planes[id].m_frame_loc.GetRot();
+    m_body->AddAsset(box);
+    m_planes[id].m_vis_box = box;
 }
 
 void ChBoundary::AddVisualization(double thickness) {
-    for (auto& plane : m_planes) {
-        ChVector<> hlen(plane.m_hlen.x(), plane.m_hlen.y(), thickness / 2);
-        ChVector<> normal = plane.m_frame_loc.GetA().Get_A_Zaxis();
-        auto box = std::make_shared<ChBoxShape>();
-        box->GetBoxGeometry().Size = hlen;
-        box->Pos = plane.m_frame_loc.GetPos() - normal * thickness / 2;
-        box->Rot = plane.m_frame_loc.GetRot();
-        m_body->AddAsset(box);
-    }
+    for (size_t id = 0; id < m_planes.size(); id++)
+        AddVisualization(id, thickness);
 }
 
 ChBoundary::Plane::Plane(const ChFrame<>& frame_loc, const ChFrame<>& frame, const ChVector2<>& lengths)

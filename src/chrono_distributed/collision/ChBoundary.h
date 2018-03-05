@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "chrono/physics/ChBody.h"
+#include "chrono/assets/ChBoxShape.h"
 
 #include "chrono_distributed/ChApiDistributed.h"
 #include "chrono_parallel/collision/ChCollisionModelParallel.h"
@@ -50,8 +51,14 @@ class CH_DISTR_API ChBoundary : public ChSystem::CustomCollisionCallback {
                      const ChVector2<>& lengths  ///< X-Y extent
     );
 
+    /// Add visualization for the specified plane.
+    void AddVisualization(size_t id,        ///< plane indes
+                          double thickness  ///< visualization thickness
+    );
+
     /// Add visualization for all existing planes.
-    void AddVisualization(double thickness);
+    void AddVisualization(double thickness  ///< visualization thickness
+    );
 
     /// Return the current number of collisions.
     int GetNContacts() const { return m_crt_count; }
@@ -62,10 +69,11 @@ class CH_DISTR_API ChBoundary : public ChSystem::CustomCollisionCallback {
   private:
     struct Plane {
         Plane(const ChFrame<>& frame_loc, const ChFrame<>& frame, const ChVector2<>& lengths);
-        ChFrame<> m_frame_loc;  ///< plane coordinate frame, relative to associated body
-        ChFrame<> m_frame;      ///< plane coordinate frame, expressed in global (Z axis defines normal)
-        ChVector2<> m_hlen;     ///< half-extents in X and Y directions
-        ChVector<> m_normal;    ///< cached plane normal, expressed in global
+        ChFrame<> m_frame_loc;                  ///< plane coordinate frame, relative to associated body
+        ChFrame<> m_frame;                      ///< plane coordinate frame, expressed in global (Z axis defines normal)
+        ChVector2<> m_hlen;                     ///< half-extents in X and Y directions
+        ChVector<> m_normal;                    ///< cached plane normal, expressed in global
+        std::shared_ptr<ChBoxShape> m_vis_box;  ///< visualization box
     };
 
     virtual void OnCustomCollision(ChSystem* system) override;
