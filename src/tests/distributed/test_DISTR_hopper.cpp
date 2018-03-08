@@ -24,6 +24,8 @@
 
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
+#include "chrono_opengl/ChOpenGLWindow.h"
+
 using namespace chrono;
 using namespace chrono::collision;
 
@@ -63,26 +65,26 @@ double rho = 4000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
               gran_radius;  // TODO shape dependent: more complicated than you'd think...
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
-double spacing = 4.0 * gran_radius;  // Distance between adjacent centers of particles
+double spacing = 2.01 * gran_radius;  // Distance between adjacent centers of particles
 
-// Dimensions TODO
-double hy = 20 * gran_radius;             // Half y dimension
-double height = 50 * gran_radius;         // Height of the box
-double slope_angle = CH_C_PI / 8.0;       // Angle of sloped wall from the horizontal
-double settling_gap = 0.0 * gran_radius;  // Width of opening of the hopper during settling phase
-int split_axis = 1;                       // Split domain along y axis
-double dx;                                // x width of slope
-double pouring_gap = 4.0 * gran_radius;   // Witdth of opening of the hopper during pouring phase
+// Dimensions
+double hy = 50 * gran_radius;                // Half y dimension
+double height = 150 * gran_radius;           // Height of the box
+double slope_angle = CH_C_PI / 5;            // Angle of sloped wall from the horizontal
+double dx = height / std::tan(slope_angle);  // x width of slope
+double settling_gap = 0 * gran_radius;       // Width of opening of the hopper during settling phase
+int split_axis = 1;                          // Split domain along y axis
+double pouring_gap = 6 * gran_radius;        // Width of opening of the hopper during pouring phase
+double settling_time = 0.25;
 
-// Settling
-double settled_ratio = 0.47;  // Void ratio signalling the end of settling
-double settled_height;        // Height the highest ball that indicates the end of settling
+size_t high_x_wall;
 
 // Simulation
 double time_step = 1e-5;
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
+double remove_fps = 50;
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
     std::stringstream ss_particles;
@@ -120,7 +122,7 @@ void Monitor(chrono::ChSystemParallel* system, int rank) {
            STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
 }
 
-void AddContainer(ChSystemDistributed* sys) {
+std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
     int binId = -200;
 
     auto mat = std::make_shared<ChMaterialSurfaceSMC>();
@@ -138,19 +140,24 @@ void AddContainer(ChSystemDistributed* sys) {
     sys->AddBodyAllRanks(bin);
     sys->IncrementGID();
 
-    auto cb = new ChBoundary(bin);
+    auto cb = std::make_shared<ChBoundary>(bin);
     // Sloped Wall
-    cb->AddPlane(ChFrame<>(ChVector<>(settling_gap + dx / 2.0, 0, height / 2.0), Q_from_AngY(-slope_angle)),
-                 ChVector2<>(std::sqrt(dx * dx + height * height), 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(settling_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)),
+                 ChVector2<>(std::sqrt(dx * dx + height * height), 2 * hy));
+    high_x_wall = 0;
 
     // Vertical wall
-    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height / 2), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2 * hy));
 
     // Parallel vertical walls
-    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2.0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)),
+    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2, -hy, height / 2), Q_from_AngX(-CH_C_PI_2)),
                  ChVector2<>(settling_gap + dx, height));
-    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2.0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)),
+    cb->AddPlane(ChFrame<>(ChVector<>((settling_gap + dx) / 2, hy, height / 2), Q_from_AngX(CH_C_PI_2)),
                  ChVector2<>(settling_gap + dx, height));
+    cb->AddVisualization(0, 3 * gran_radius);
+    cb->AddVisualization(1, 3 * gran_radius);
+
+    return cb;
 }
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
@@ -177,34 +184,35 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
 }
 
 size_t AddFallingBalls(ChSystemDistributed* sys) {
-    ChVector<double> box_center((settling_gap + dx / 2.0) / 2.0, 0, 3.0 * height / 4.0);
-
-    ChVector<double> h_dims((settling_gap + dx / 2.0) / 2.0, hy, height / 4.0);
-    ChVector<double> padding = 3.0 * gran_radius * ChVector<double>(1, 1, 1);
-    ChVector<double> half_dims = h_dims - padding;
+    double first_layer_width = 10 * gran_radius;
 
     // utils::GridSampler<> sampler(spacing);
     utils::HCPSampler<> sampler(spacing);
-
-    auto points = sampler.SampleBox(box_center, half_dims);
-
+    size_t count = 0;
     auto ballMat = std::make_shared<ChMaterialSurfaceSMC>();
     ballMat->SetYoungModulus(Y);
     ballMat->SetFriction(mu);
     ballMat->SetRestitution(cr);
     ballMat->SetAdhesion(0);
 
-    // Create the falling balls
+    ChVector<double> box_center(dx / 2, 0, height / 2);
+    ChVector<double> h_dims(dx / 2, hy, height / 2);
+    ChVector<double> padding = spacing * ChVector<double>(1, 1, 1);
+    ChVector<double> half_dims = h_dims - padding;
+    auto points = sampler.SampleBox(box_center, half_dims);
     int ballId = 0;
     for (int i = 0; i < points.size(); i++) {
-        if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBody(ball);
+        if (points[i].z() > (height * points[i].x()) / dx + 3 * gran_radius) {
+            if (sys->InSub(points[i])) {
+                auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
+                sys->AddBody(ball);
+            }
+            sys->IncrementGID();
+            count++;
         }
-        sys->IncrementGID();
     }
 
-    return points.size();
+    return count;
 }
 
 int main(int argc, char* argv[]) {
@@ -226,7 +234,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    dx = height / std::tan(slope_angle);
     // if (my_rank == 0) {
     // 	int foo;
     // 	std::cout << "Enter something too continue..." << std::endl;
@@ -283,7 +290,7 @@ int main(int argc, char* argv[]) {
     my_sys.Set_G_acc(ChVector<double>(0, 0, -9.8));
 
     // Domain decomposition
-    ChVector<double> domlo(0, -hy, -10);
+    ChVector<double> domlo(-2 * gran_radius, -hy, -10);
     ChVector<double> domhi(pouring_gap + dx, hy, height + gran_radius);
     my_sys.GetDomain()->SetSplitAxis(split_axis);
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
@@ -295,15 +302,13 @@ int main(int argc, char* argv[]) {
     my_sys.GetSettings()->solver.max_iteration_bilateral = max_iteration;
     my_sys.GetSettings()->solver.tolerance = tolerance;
 
-    my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
+    my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hooke;
     my_sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
-    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_R;
+    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
 
-    int binX;
-    int binY;
-    int binZ;  // TODO
-    int factor = 2;
+    int binX, binY, binZ;
+    int factor = 4;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
     ChVector<> subsize = (subhi - sublo) / (2 * gran_radius);
@@ -316,21 +321,17 @@ int main(int argc, char* argv[]) {
         binY = 1;
 
     binZ = (int)std::ceil(subsize.z()) / factor;
-    if (binZ == 0) {
+    if (binZ == 0)
         binZ = 1;
-    }
 
+    // TODO Bins
     my_sys.GetSettings()->collision.bins_per_axis = vec3(binX, binY, binZ);
     if (verbose)
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
-    AddContainer(&my_sys);
+    auto cb = AddContainer(&my_sys);
     auto actual_num_bodies = AddFallingBalls(&my_sys);
     MPI_Barrier(my_sys.GetMPIWorld());
-
-    settled_height =
-        std::sqrt(((1 + settled_ratio) * actual_num_bodies * 4.0 / 3.0 * CH_C_PI * std::pow(gran_radius, 3)) /
-                  (hy * std::tan(CH_C_PI / 2.0 - slope_angle)));
 
     if (my_rank == MASTER)
         std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
@@ -347,6 +348,8 @@ int main(int argc, char* argv[]) {
     int num_steps = (int)std::ceil(time_end / time_step);
     int out_steps = (int)std::ceil((1 / time_step) / out_fps);
     int out_frame = 0;
+    int remove_steps = (int)std::ceil((1 / time_step) / remove_fps);
+
     double time = 0;
 
     if (verbose && my_rank == MASTER)
@@ -354,31 +357,56 @@ int main(int argc, char* argv[]) {
 
     bool settling = true;
     double t_start = MPI_Wtime();
-    for (int i = 0; i < num_steps; i++) {
-        my_sys.DoStepDynamics(time_step);
+
+    // Perform the simulation
+    opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+    gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
+    gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
+                        0.01f);
+    gl_window.SetRenderMode(opengl::WIREFRAME);
+    for (int i = 0; gl_window.Active(); i++) {
+        gl_window.DoStepDynamics(time_step);
         time += time_step;
-
-        if (i % out_steps == 0) {
-            if (settling && time >= 0.5) {
-                settling = false;
-                // TODO:    high_x_wall->SetPos(high_x_wall->GetPos() + ChVector<>(pouring_gap, 0, 0));
-            }
-            if (my_rank == MASTER)
-                std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
-            if (output_data) {
-                WriteCSV(&outfile, out_frame, &my_sys);
-                out_frame++;
-            }
+        if (settling && time >= settling_time) {
+            settling = false;
+            cb->UpdatePlane(high_x_wall,
+                            ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
         }
-
-        // my_sys.SanityCheck();
-        if (monitor)
-            Monitor(&my_sys, my_rank);
+        if (i % remove_steps == 0)
+            my_sys.RemoveBodiesBelow(-4 * gran_radius);
+        gl_window.Render();
     }
-    double elapsed = MPI_Wtime() - t_start;
 
-    if (my_rank == MASTER)
-        std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
+    // for (int i = 0; i < num_steps; i++) {
+    //     my_sys.DoStepDynamics(time_step);
+    //     time += time_step;
+    //
+    //     if (i % out_steps == 0) {
+    //         if (settling && time >= settling_time) {
+    //             settling = false;
+    //             cb->UpdatePlane(high_x_wall,
+    //                             ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2),
+    //                             Q_from_AngY(-slope_angle)));
+    //         }
+    //
+    //         if (my_rank == MASTER)
+    //             std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
+    //         if (output_data) {
+    //             WriteCSV(&outfile, out_frame, &my_sys);
+    //             out_frame++;
+    //         }
+    //     }
+    //
+    //     // my_sys.SanityCheck();
+    //     if (monitor)
+    //         Monitor(&my_sys, my_rank);
+    //     if (i % remove_steps == 0)
+    //         my_sys.RemoveBodiesBelow(-4 * gran_radius);
+    // }
+    // double elapsed = MPI_Wtime() - t_start;
+    //
+    // if (my_rank == MASTER)
+    //     std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
 
     if (output_data)
         outfile.close();

@@ -207,7 +207,7 @@ int main(int argc, char* argv[]) {
     msystem.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
     msystem.GetSettings()->collision.bins_per_axis = vec3(10, 10, 10);
 
-    msystem.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
+    msystem.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hooke;
     msystem.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
     // Create the fixed and moving bodies

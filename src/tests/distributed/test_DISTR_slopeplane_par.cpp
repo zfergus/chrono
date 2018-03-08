@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
     sys.GetSettings()->collision.bins_per_axis = vec3(10, 10, 10);
 
-    sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
+    sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hooke;
     sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
     // Create objects

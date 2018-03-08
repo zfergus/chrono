@@ -62,28 +62,29 @@ bool GetProblemSpecs(int argc,
 void ShowUsage();
 
 // Granular Properties
-float Y = 2e6f;
+float Y = 2e6f; // TODO 2e6f
 float mu = 0.4f;
 float cr = 0.05f;
 double gran_radius = 0.00125;  // 1.25mm radius
 double rho = 4000;
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
-double mass = rho * 4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius;
+double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
 
 // Dimensions
 double hx = -1.0;
 double hy = -1.0;
 double height = -1.0;
+int split_axis = 1;
 
 // Oscillation
-double period = 0.5;                   // TODO adjust
-double amplitude = gran_radius * 5.0;  // TODO adjust
+double period = 1.0;
+double amplitude = spacing * 5.0;
 size_t low_x_wall;
 size_t high_x_wall;
 
 // Simulation
-double time_step = 1e-5;
+double time_step = 1e-5; // TODO 1e-5
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
@@ -145,6 +146,9 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
     auto cb = std::make_shared<ChBoundary>(bin);
     // Floor
     cb->AddPlane(ChFrame<>(ChVector<>(0, 0, 0), QUNIT), ChVector2<>(2.0 * hx, 2.0 * hy));
+    // Ceiling
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height), Q_from_AngX(CH_C_PI)), ChVector2<>(2.0 * hx, 2.0 * hy));
+
     // low x
     cb->AddPlane(ChFrame<>(ChVector<>(-hx, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
     low_x_wall = 1;
@@ -212,7 +216,6 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     return points.size();
 }
 
-// TODO need to expand domain decomp
 double GetWallPos(double cur_time) {
     return amplitude * std::sin(cur_time * 2 * CH_C_PI / period);
 }
@@ -294,7 +297,7 @@ int main(int argc, char* argv[]) {
     // Domain decomposition
     ChVector<double> domlo(-hx - amplitude - spacing, -hy + spacing, -2.0 * spacing);
     ChVector<double> domhi(hx + amplitude + spacing, hy + spacing, height + 3.0 * spacing);
-    my_sys.GetDomain()->SetSplitAxis(1);  // Split along the y-axis
+    my_sys.GetDomain()->SetSplitAxis(split_axis);  // Split along the y-axis
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
 
     if (verbose)
@@ -307,7 +310,7 @@ int main(int argc, char* argv[]) {
     my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
     my_sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
-    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_R;
+    my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
 
     int binX;
     int binY;
