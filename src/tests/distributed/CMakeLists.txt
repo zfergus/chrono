@@ -21,6 +21,7 @@ set(TESTS_OPENGL
     test_DISTR_boundary_par
     test_DISTR_slopeplane_par
     test_DISTR_hopper_par
+	test_PAR_hopper
 )
 
 # ------------------------------------------------------------------------------

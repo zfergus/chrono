@@ -280,8 +280,8 @@ void ChSystemDistributed::RemoveBody(std::shared_ptr<ChBody> body) {
     bodylist[index]->SetCollide(false);  // NOTE: Calls collisionsystem::remove
     if (index < ddm->first_empty)
         ddm->first_empty = index;
-    GetLog() << "REMOVEBODY\n";
     ddm->gid_to_localid.erase(body->GetGid());
+	body->GetAssets().clear();
 }
 
 // Used to end the program on an error and print a message.
