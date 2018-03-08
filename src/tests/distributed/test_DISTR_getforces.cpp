@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <climits>
 
 #include "chrono_distributed/collision/ChBoundary.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"

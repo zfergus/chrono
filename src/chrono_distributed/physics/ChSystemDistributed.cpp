@@ -281,7 +281,7 @@ void ChSystemDistributed::RemoveBody(std::shared_ptr<ChBody> body) {
     if (index < ddm->first_empty)
         ddm->first_empty = index;
     ddm->gid_to_localid.erase(body->GetGid());
-	body->GetAssets().clear();
+    body->GetAssets().clear();
 }
 
 // Used to end the program on an error and print a message.
@@ -468,12 +468,21 @@ void ChSystemDistributed::SanityCheck() {
     // std::cout << " NULL\n";
 }
 
-void ChSystemDistributed::RemoveBodiesBelow(double z) {
+int ChSystemDistributed::RemoveBodiesBelow(double z) {
+    int count = 0;
     for (int i = 0; i < data_manager->num_rigid_bodies; i++) {
-        if (ddm->comm_status[i] != distributed::EMPTY && data_manager->host_data.pos_rigid[i][2] < z) {
+        auto status = ddm->comm_status[i];
+        if (status != distributed::EMPTY && data_manager->host_data.pos_rigid[i][2] < z) {
             RemoveBody(bodylist[i]);
+            if (status == distributed::OWNED || status == distributed::SHARED_DOWN ||
+                status == distributed::SHARED_UP) {
+                count++;
+            }
         }
     }
+    int final_count;
+    MPI_Reduce((void*)&count, (void*)&final_count, 1, MPI_INT, MPI_SUM, 0, world);
+    return final_count;
 }
 
 void ChSystemDistributed::SetBodyStates(std::vector<uint> gids, std::vector<BodyState> states) {

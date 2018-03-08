@@ -22,9 +22,8 @@
 
 #include "chrono_thirdparty/SimpleOpt/SimpleOpt.h"
 
+#include "GeometryUtils.h"
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
-
-#include "chrono_opengl/ChOpenGLWindow.h"
 
 using namespace chrono;
 using namespace chrono::collision;
@@ -68,8 +67,8 @@ ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>
 double spacing = 2.5 * gran_radius;  // Distance between adjacent centers of particles
 
 // Dimensions
-double hy = 50 * gran_radius;                // Half y dimension
-double height = 150 * gran_radius;           // Height of the box
+double hy = 10 * gran_radius;                // 50             // Half y dimension
+double height = 50 * gran_radius;            // 150          // Height of the box
 double slope_angle = CH_C_PI / 5;            // Angle of sloped wall from the horizontal
 double dx = height / std::tan(slope_angle);  // x width of slope
 double settling_gap = 0 * gran_radius;       // Width of opening of the hopper during settling phase
@@ -84,7 +83,33 @@ double time_step = 1e-5;
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
-double remove_fps = 50;
+double remove_fps = 60;
+enum { SPHERE_H, BISPHERE_H, SPHERE_BISPHERE_H };
+int mix = SPHERE_H;
+
+int GetGeometry(int id, ChBody* body) {
+    switch (mix) {
+        case SPHERE_H:
+            utils::AddSphereGeometry(body, gran_radius);
+            break;
+
+        case BISPHERE_H:
+            AddBiSphere(body, gran_radius);
+            break;
+
+        case SPHERE_BISPHERE_H:
+            if (id % 2 == 0)
+                utils::AddSphereGeometry(body, gran_radius);
+            else
+                AddBiSphere(body, gran_radius);
+            break;
+
+        default:
+            std::cout << "Select a mix type" << std::endl;
+            MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
+            break;
+    }
+}
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
     std::stringstream ss_particles;
@@ -162,15 +187,12 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
 
 inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
                                           std::shared_ptr<ChMaterialSurfaceSMC> ballMat,
-                                          int* ballId,
-                                          double m,
-                                          ChVector<> inertia,
-                                          double radius) {
+                                          int& ballId) {
     auto ball = std::make_shared<ChBody>(std::make_shared<ChCollisionModelDistributed>(), ChMaterialSurface::SMC);
     ball->SetMaterialSurface(ballMat);
 
-    ball->SetIdentifier(*ballId++);
-    ball->SetMass(m);
+    ball->SetIdentifier(ballId++);
+    ball->SetMass(mass);
     ball->SetInertiaXX(inertia);
     ball->SetPos(pos);
     ball->SetRot(ChQuaternion<>(1, 0, 0, 0));
@@ -178,8 +200,9 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
     ball->SetCollide(true);
 
     ball->GetCollisionModel()->ClearModel();
-    utils::AddSphereGeometry(ball.get(), radius);
+    GetGeometry(ballId, ball.get());
     ball->GetCollisionModel()->BuildModel();
+
     return ball;
 }
 
@@ -204,7 +227,7 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     for (int i = 0; i < points.size(); i++) {
         if (points[i].z() > (height * points[i].x()) / dx + 3 * gran_radius) {
             if (sys->InSub(points[i])) {
-                auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
+                auto ball = CreateBall(points[i], ballMat, ballId);
                 sys->AddBody(ball);
             }
             sys->IncrementGID();
@@ -361,7 +384,8 @@ int main(int argc, char* argv[]) {
     // // Perform the simulation
     // opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
     // gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
-    // gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
+    // gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0,
+    // 1),
     //                     0.01f);
     // gl_window.SetRenderMode(opengl::WIREFRAME);
     // for (int i = 0; gl_window.Active(); i++) {
@@ -380,15 +404,8 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_steps; i++) {
         my_sys.DoStepDynamics(time_step);
         time += time_step;
-    
+
         if (i % out_steps == 0) {
-            if (settling && time >= settling_time) {
-                settling = false;
-                cb->UpdatePlane(high_x_wall,
-                                ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2),
-                                Q_from_AngY(-slope_angle)));
-            }
-    
             if (my_rank == MASTER)
                 std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
             if (output_data) {
@@ -396,15 +413,23 @@ int main(int argc, char* argv[]) {
                 out_frame++;
             }
         }
-    
-        // my_sys.SanityCheck();
+
         if (monitor)
             Monitor(&my_sys, my_rank);
-        if (i % remove_steps == 0)
-            my_sys.RemoveBodiesBelow(-4 * gran_radius);
+        if (settling && time >= settling_time) {
+            settling = false;
+            cb->UpdatePlane(high_x_wall,
+                            ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
+        }
+        if (!settling && i % remove_steps == 0) {
+            int remove_count = my_sys.RemoveBodiesBelow(-4 * gran_radius);
+            if (my_rank == MASTER)
+                std::cout << remove_count << " bodies removed" << std::endl;
+            // TODO: track pour rate
+        }
     }
     double elapsed = MPI_Wtime() - t_start;
-    
+
     if (my_rank == MASTER)
         std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
 

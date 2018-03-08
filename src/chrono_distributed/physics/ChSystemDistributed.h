@@ -139,7 +139,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Removes all bodies below the given height - initial implementation of a
     /// deactivating boundary condition.
-    void RemoveBodiesBelow(double z);
+    int RemoveBodiesBelow(double z);
 
     /// Checks structures added by chrono_distributed. Prints ERROR messages at
     /// inconsistencies.
