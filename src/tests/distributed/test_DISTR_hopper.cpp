@@ -65,7 +65,7 @@ double rho = 4000;
 double mass = 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius *
               gran_radius;  // TODO shape dependent: more complicated than you'd think...
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
-double spacing = 2.01 * gran_radius;  // Distance between adjacent centers of particles
+double spacing = 2.5 * gran_radius;  // Distance between adjacent centers of particles
 
 // Dimensions
 double hy = 50 * gran_radius;                // Half y dimension
@@ -308,19 +308,19 @@ int main(int argc, char* argv[]) {
     my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
 
     int binX, binY, binZ;
-    int factor = 4;
+    double factor = 3;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
     ChVector<> subsize = (subhi - sublo) / (2 * gran_radius);
-    binX = (int)std::ceil(subsize.x()) / factor;
+    binX = (int)std::ceil(subsize.x() / factor);
     if (binX == 0)
         binX = 1;
 
-    binY = (int)std::ceil(subsize.y()) / factor;
+    binY = (int)std::ceil(subsize.y() / factor);
     if (binY == 0)
         binY = 1;
 
-    binZ = (int)std::ceil(subsize.z()) / factor;
+    binZ = (int)std::ceil(height / (2.0 * factor));
     if (binZ == 0)
         binZ = 1;
 
@@ -358,55 +358,55 @@ int main(int argc, char* argv[]) {
     bool settling = true;
     double t_start = MPI_Wtime();
 
-    // Perform the simulation
-    opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
-    gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
-    gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
-                        0.01f);
-    gl_window.SetRenderMode(opengl::WIREFRAME);
-    for (int i = 0; gl_window.Active(); i++) {
-        gl_window.DoStepDynamics(time_step);
-        time += time_step;
-        if (settling && time >= settling_time) {
-            settling = false;
-            cb->UpdatePlane(high_x_wall,
-                            ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
-        }
-        if (i % remove_steps == 0)
-            my_sys.RemoveBodiesBelow(-4 * gran_radius);
-        gl_window.Render();
-    }
-
-    // for (int i = 0; i < num_steps; i++) {
-    //     my_sys.DoStepDynamics(time_step);
+    // // Perform the simulation
+    // opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+    // gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
+    // gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
+    //                     0.01f);
+    // gl_window.SetRenderMode(opengl::WIREFRAME);
+    // for (int i = 0; gl_window.Active(); i++) {
+    //     gl_window.DoStepDynamics(time_step);
     //     time += time_step;
-    //
-    //     if (i % out_steps == 0) {
-    //         if (settling && time >= settling_time) {
-    //             settling = false;
-    //             cb->UpdatePlane(high_x_wall,
-    //                             ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2),
-    //                             Q_from_AngY(-slope_angle)));
-    //         }
-    //
-    //         if (my_rank == MASTER)
-    //             std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
-    //         if (output_data) {
-    //             WriteCSV(&outfile, out_frame, &my_sys);
-    //             out_frame++;
-    //         }
+    //     if (settling && time >= settling_time) {
+    //         settling = false;
+    //         cb->UpdatePlane(high_x_wall,
+    //                         ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
     //     }
-    //
-    //     // my_sys.SanityCheck();
-    //     if (monitor)
-    //         Monitor(&my_sys, my_rank);
     //     if (i % remove_steps == 0)
     //         my_sys.RemoveBodiesBelow(-4 * gran_radius);
+    //     gl_window.Render();
     // }
-    // double elapsed = MPI_Wtime() - t_start;
-    //
-    // if (my_rank == MASTER)
-    //     std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
+
+    for (int i = 0; i < num_steps; i++) {
+        my_sys.DoStepDynamics(time_step);
+        time += time_step;
+    
+        if (i % out_steps == 0) {
+            if (settling && time >= settling_time) {
+                settling = false;
+                cb->UpdatePlane(high_x_wall,
+                                ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2),
+                                Q_from_AngY(-slope_angle)));
+            }
+    
+            if (my_rank == MASTER)
+                std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
+            if (output_data) {
+                WriteCSV(&outfile, out_frame, &my_sys);
+                out_frame++;
+            }
+        }
+    
+        // my_sys.SanityCheck();
+        if (monitor)
+            Monitor(&my_sys, my_rank);
+        if (i % remove_steps == 0)
+            my_sys.RemoveBodiesBelow(-4 * gran_radius);
+    }
+    double elapsed = MPI_Wtime() - t_start;
+    
+    if (my_rank == MASTER)
+        std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
 
     if (output_data)
         outfile.close();
