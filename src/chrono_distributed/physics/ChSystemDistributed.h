@@ -49,19 +49,19 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     virtual ~ChSystemDistributed();
 
     /// Returns the number of MPI ranks the system is using.
-    int GetNumRanks() { return num_ranks; }
+    int GetNumRanks() const { return num_ranks; }
 
     /// Returns the number of the rank the system is running on.
-    int GetMyRank() { return my_rank; }
+    int GetMyRank() const { return my_rank; }
 
-    int GetMasterRank() { return master_rank; }
+    int GetMasterRank() const { return master_rank; }
 
     /// Returns the distance into the neighboring sub-domain that is considered shared.
-    double GetGhostLayer() { return ghost_layer; }
+    double GetGhostLayer() const { return ghost_layer; }
 
     /// A running count of the number of global bodies for
     /// identification purposes
-    int GetNumBodiesGlobal() { return num_bodies_global; }
+    int GetNumBodiesGlobal() const { return num_bodies_global; }
 
     /// Should be called every add to the GLOBAL system i.e. regardless of whether
     /// the body in question is retained by the system on a particular rank, this
@@ -69,7 +69,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     int IncrementGID() { return num_bodies_global++; }
 
     /// Returns true if pos is within this rank's sub-domain.
-    bool InSub(ChVector<double> pos);
+    bool InSub(ChVector<double> pos) const;
 
     /// Create a new body, consistent with the contact method and collision model used by this system.
     /// The returned body is not added to the system.
@@ -81,17 +81,19 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Add a body to the system. Should be called on every rank for every body.
     /// Classifies the body and decides whether or not to keep it on this rank.
-    void AddBody(std::shared_ptr<ChBody> newbody) override;
+    virtual void AddBody(std::shared_ptr<ChBody> newbody) override;
 
     /// Adds a body to the system regardless of its location. Should only be called
     /// if the caller needs a body added to the entire system. NOTE: A body crossing
     /// multiple sub-domains will not be correctly advanced.
+    void AddBodyAllRanks(std::shared_ptr<ChBody> body);
+
     void AddBodyTrust(std::shared_ptr<ChBody> newbody);
 
     /// Removes a body from the simulation based on the ID of the body (not based on
     /// object comparison between ChBodys). Should be called on all ranks to ensure
     /// that the correct body is found and removed where it exists.
-    void RemoveBody(std::shared_ptr<ChBody> body) override;
+    virtual void RemoveBody(std::shared_ptr<ChBody> body) override;
 
     /// Wraps the super-class Integrate_Y call and introduces a call that carries
     /// out all inter-rank communication.
@@ -105,10 +107,10 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     void RemoveBodyExchange(int index);
 
     /// Returns the ChDomainDistributed object associated with the system.
-    ChDomainDistributed* GetDomain() { return domain; }
+    ChDomainDistributed* GetDomain() const { return domain; }
 
     /// Returns the ChCommDistributed object associated with the system.
-    ChCommDistributed* GetComm() { return comm; }
+    ChCommDistributed* GetComm() const { return comm; }
 
     /// Prints msg to the user and ends execution with an MPI abort.
     void ErrorAbort(std::string msg);
@@ -123,7 +125,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     void PrintEfficiency();
 
     /// Returns the MPI communicator being used by the system.
-    MPI_Comm GetMPIWorld() { return world; }
+    MPI_Comm GetMPIWorld() const { return world; }
 
     /// Central data storages for chrono_distributed. Adds scaffolding data
     /// around ChDataManager used by chrono_parallel in order to maintain
@@ -142,8 +144,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Checks for consistency in IDs in the system. Should only be used
     /// for debugging.
     void CheckIds();
-
-    void AddBodyAllRanks(std::shared_ptr<ChBody> body);
 
     /// Removes all bodies below the given height - initial implementation of a
     /// deactivating boundary condition.

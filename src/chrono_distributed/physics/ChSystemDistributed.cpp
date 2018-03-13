@@ -117,7 +117,7 @@ ChSystemDistributed::~ChSystemDistributed() {
     // delete ddm;
 }
 
-bool ChSystemDistributed::InSub(ChVector<double> pos) {
+bool ChSystemDistributed::InSub(ChVector<double> pos) const {
     int split_axis = domain->GetSplitAxis();
 
     double pos_axis = pos[split_axis];
