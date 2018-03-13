@@ -41,22 +41,31 @@ class ChDataManagerDistr;
 /// Add bodies and set all settings through the system.
 /// The simulation runs on all ranks given in the world parameter.
 class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
-    friend class ChCommDistributed;
-
   public:
     /// Construct a distributed Chrono system using the specified MPI communicator.
-    ChSystemDistributed(MPI_Comm communicator, double ghost_layer, unsigned int max_objects);
+    ChSystemDistributed(MPI_Comm communicator, double ghostlayer, unsigned int maxobjects);
     virtual ~ChSystemDistributed();
 
-    /// Returns the number of MPI ranks the system is using.
-    int GetNumRanks() const { return num_ranks; }
+    /// Return the size of the group associated with the system's intra-communicator.
+    int GetCommSize() const { return num_ranks; }
 
-    /// Returns the number of the rank the system is running on.
-    int GetMyRank() const { return my_rank; }
+    /// Return the rank of the calling process in the system's intra-communicator.
+    int GetCommRank() const { return my_rank; }
 
+    /// Set the calling process as 'master' in the intra-communicator used by this system.
+    /// For efficiency, certain functions report information only on this single rank.  This saves
+    /// a potentially unnecessary scatter operation (if needed, such an operation should be performed
+    /// in user code).  By default this is rank 0 in the system's intra-communicator.
+    void SetMaster() { master_rank = my_rank; }
+ 
+    /// Return the rank (in the system's intra-communicator) of the process marked as 'master'.
+    /// Certain functions return information only on this process.
     int GetMasterRank() const { return master_rank; }
 
-    /// Returns the distance into the neighboring sub-domain that is considered shared.
+    /// Return true if the calling process is the one marked as 'master'.
+    bool OnMaster() const { return my_rank == master_rank; }
+
+    /// Return the distance into the neighboring sub-domain that is considered shared.
     double GetGhostLayer() const { return ghost_layer; }
 
     /// Return the current global number of bodies in the system.
@@ -97,7 +106,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// the global number of bodies *on all ranks*, through a call to IncrementNumBodiesGlobal.
     void AddBodyTrust(std::shared_ptr<ChBody> newbody);
 
-    /// Removes a body from the simulation based on the ID of the body (not based on
+    /// Remove a body from the simulation based on the ID of the body (not based on
     /// object comparison between ChBodys). Should be called on all ranks to ensure
     /// that the correct body is found and removed where it exists.
     virtual void RemoveBody(std::shared_ptr<ChBody> body) override;
@@ -250,6 +259,9 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     // Co-simulation
     MPI_Datatype InternalForceType;
+
+    friend class ChCommDistributed;
+    friend class ChDomainDistributed;
 };
 
 } /* namespace chrono */

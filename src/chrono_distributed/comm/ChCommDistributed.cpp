@@ -146,20 +146,20 @@ void ChCommDistributed::ProcessUpdates(int num_recv, BodyUpdate* buf) {
             if (ddm->comm_status[index] != distributed::GHOST_UP &&
                 ddm->comm_status[index] != distributed::GHOST_DOWN) {
                 my_sys->ErrorAbort(std::string("Trying to update a non-ghost body on rank ") +
-                                   std::to_string(my_sys->GetMyRank()) + std::string("GID ") +
+                                   std::to_string(my_sys->my_rank) + std::string("GID ") +
                                    std::to_string((buf + n)->gid) + std::string("\n"));
             }
             body = (*data_manager->body_list)[index];
             UnpackUpdate(buf + n, body);
             if ((buf + n)->update_type == distributed::FINAL_UPDATE_GIVE) {
-                GetLog() << "GIVE " << ddm->global_id[index] << " to rank " << my_sys->GetMyRank() << "\n";
+                GetLog() << "GIVE " << ddm->global_id[index] << " to rank " << my_sys->my_rank << "\n";
                 ddm->comm_status[index] = distributed::OWNED;
             } else if ((buf + n)->update_type == distributed::UPDATE_TRANSFER_SHARE) {
                 ddm->comm_status[index] = (ddm->comm_status[index] == distributed::GHOST_UP) ? distributed::SHARED_UP
                                                                                              : distributed::SHARED_DOWN;
             }
         } else {
-            GetLog() << "GID " << (buf + n)->gid << " NOT found rank " << my_sys->GetMyRank() << "\n";
+            GetLog() << "GID " << (buf + n)->gid << " NOT found rank " << my_sys->my_rank << "\n";
             my_sys->ErrorAbort("Body to be updated not found\n");
         }
     }
@@ -191,7 +191,7 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
         int local_id = ddm->GetLocalIndex(gid);
         if (local_id == -1) {
             my_sys->ErrorAbort(std::string("ProcessShapes: GID ") + std::to_string(gid) + " not found on rank " +
-                               std::to_string(my_sys->GetMyRank()) + "\n");
+                               std::to_string(my_sys->my_rank) + "\n");
         }
         std::shared_ptr<ChBody> body = (*ddm->data_manager->body_list)[local_id];
 
@@ -228,7 +228,7 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
                         data[0], data[1], data[2], A, ChMatrix33<>(ChQuaternion<>(rot[0], rot[1], rot[2], rot[3])));
                     break;
                 default:
-                    GetLog() << "Error: gid " << gid << " rank " << my_sys->GetMyRank() << " type " << (buf + n)->type
+                    GetLog() << "Error: gid " << gid << " rank " << my_sys->my_rank << " type " << (buf + n)->type
                              << "\n";
                     my_sys->ErrorAbort("Unpacking undefined collision shape\n");
             }
@@ -241,8 +241,8 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
 
 // Handle all necessary communication
 void ChCommDistributed::Exchange() {
-    int my_rank = my_sys->GetMyRank();
-    int num_ranks = my_sys->GetNumRanks();
+    int my_rank = my_sys->my_rank;
+    int num_ranks = my_sys->num_ranks;
     std::forward_list<int> exchanges_up;
     std::forward_list<int> exchanges_down;
 
@@ -361,14 +361,14 @@ void ChCommDistributed::Exchange() {
                           ddm->comm_status[i] == distributed::SHARED_DOWN)) {
                     int up;
                     if (location == distributed::UNOWNED_UP && my_rank != num_ranks - 1) {
-                        GetLog() << "GIVE " << ddm->global_id[i] << " from rank " << my_sys->GetMyRank() << "\n";
+                        GetLog() << "GIVE " << ddm->global_id[i] << " from rank " << my_rank << "\n";
                         BodyUpdate b_upd = {};
                         PackUpdate(&b_upd, i, distributed::FINAL_UPDATE_GIVE);
                         update_up_buf.push_back(b_upd);
                         num_update_up++;  // TODO might be able to eliminate
                         up = 1;
                     } else if (location == distributed::UNOWNED_DOWN && my_rank != 0) {
-                        GetLog() << "GIVE " << ddm->global_id[i] << " from rank " << my_sys->GetMyRank() << "\n";
+                        GetLog() << "GIVE " << ddm->global_id[i] << " from rank " << my_rank << "\n";
                         BodyUpdate b_upd = {};
                         PackUpdate(&b_upd, i, distributed::FINAL_UPDATE_GIVE);
                         update_down_buf.push_back(b_upd);
@@ -512,7 +512,7 @@ void ChCommDistributed::Exchange() {
             }
 
             // Recv Exchanges
-            if (my_sys->GetMyRank() != 0) {
+            if (my_rank != 0) {
                 MPI_Probe(my_rank - 1, 1, my_sys->world, &recv_status_exchange_down);
                 MPI_Get_count(&recv_status_exchange_down, BodyExchangeType, &num_recv_exchange_down);
                 recv_exchange_down = new BodyExchange[num_recv_exchange_down];
@@ -538,7 +538,7 @@ void ChCommDistributed::Exchange() {
             }
 
             // Recv Updates
-            if (my_sys->GetMyRank() != 0) {
+            if (my_rank != 0) {
                 MPI_Probe(my_rank - 1, 3, my_sys->world, &recv_status_update_down);
                 MPI_Get_count(&recv_status_update_down, BodyUpdateType, &num_recv_update_down);
                 recv_update_down = new BodyUpdate[num_recv_update_down];
@@ -563,7 +563,7 @@ void ChCommDistributed::Exchange() {
             }
 
             // Recv Takes
-            if (my_sys->GetMyRank() != 0) {
+            if (my_rank != 0) {
                 MPI_Probe(my_rank - 1, 5, my_sys->world, &recv_status_take_down);
                 MPI_Get_count(&recv_status_take_down, MPI_UNSIGNED, &num_recv_take_down);
                 recv_take_down = new uint[num_recv_take_down];
@@ -645,7 +645,7 @@ void ChCommDistributed::Exchange() {
     }
 
     // Recv Shapes
-    if (my_sys->GetMyRank() != 0) {
+    if (my_rank != 0) {
         MPI_Probe(my_rank - 1, 7, my_sys->world, &recv_status_shapes_down);
         MPI_Get_count(&recv_status_shapes_down, ShapeType, &num_recv_shapes_down);
         recv_shapes_down = new Shape[num_recv_shapes_down];

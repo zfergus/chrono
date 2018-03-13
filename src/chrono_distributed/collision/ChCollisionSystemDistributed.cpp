@@ -42,7 +42,6 @@ void ChCollisionSystemDistributed::Add(ChCollisionModel* model) {
     ChCollisionModelDistributed* pmodel = static_cast<ChCollisionModelDistributed*>(model);
     // Find space in ddm vectors - need one index for both start and count
     // need a chunk of body_shapes large enough for all shapes on this body
-    int my_rank = ddm->my_sys->GetMyRank();
     int body_index = pmodel->GetBody()->GetId();  // NOTE: Assumes this is set
     int needed_count = pmodel->GetNObjects();     // Minimum size needed in ddm->body_shapes
     ChVector<> pos(pmodel->GetBody()->GetPos());

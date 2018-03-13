@@ -50,11 +50,11 @@ static void PrintNode(LocalShapeNode* node) {
               << "| ---> ";
 }
 
-ChSystemDistributed::ChSystemDistributed(MPI_Comm communicator, double ghost_layer, unsigned int max_objects) {
+ChSystemDistributed::ChSystemDistributed(MPI_Comm communicator, double ghostlayer, unsigned int maxobjects)
+    : ghost_layer(ghostlayer), master_rank(0), num_bodies_global(0) {
     MPI_Comm_dup(communicator, &world);
     MPI_Comm_size(world, &num_ranks);
     MPI_Comm_rank(world, &my_rank);
-    master_rank = 0;  // TODO Does this need to do anything else?
     int name_len = -1;
     MPI_Get_processor_name(node_name, &name_len);
 
@@ -62,13 +62,10 @@ ChSystemDistributed::ChSystemDistributed(MPI_Comm communicator, double ghost_lay
     domain = new ChDomainDistributed(this);
     comm = new ChCommDistributed(this);
 
-    this->ghost_layer = ghost_layer;
-    this->num_bodies_global = 0;
-
     data_manager->system_timer.AddTimer("Exchange");
 
     // Reserve starting space
-    int init = max_objects;  // / num_ranks;
+    int init = maxobjects;  // / num_ranks;
     bodylist.reserve(init);
 
     ddm->global_id.reserve(init);
@@ -607,12 +604,12 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
         }
     }
 
-    // Rank 0 recvs all messages sent to it and appends the values into its gid vector
+    // Master rank receives all messages sent to it and appends the values to its gid vector
     MPI_Request r_bar;
     MPI_Status s_bar;
     internal_force* buf = new internal_force[gids.size()];
     int num_gids = 0;
-    if (my_rank == 0) {
+    if (my_rank == master_rank) {
         // Write rank 0 values
         if (send.size() > 0) {
             std::memcpy(buf, send.data(), sizeof(internal_force) * send.size());
@@ -687,12 +684,12 @@ std::pair<uint, ChVector<>> ChSystemDistributed::GetBodyContactForce(uint gid) {
         }
     }
 
-    // Rank 0 recvs all messages sent to it and appends the values into its gid vector
+    // Master rank receives all messages sent to it and appends the values to its gid vector
     MPI_Request r_bar;
     MPI_Status s_bar;
     internal_force* buf = new internal_force;
     int num_gids = 0;
-    if (my_rank == 0) {
+    if (my_rank == master_rank) {
         // Write rank 0 values // if 0 had a value, send is already full and done
         MPI_Ibarrier(world, &r_bar);
         MPI_Status s_prob;
