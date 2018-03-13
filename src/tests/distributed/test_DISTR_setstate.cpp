@@ -156,9 +156,9 @@ size_t AddFallingBall(ChSystemDistributed* sys) {
     ChVector<> pos(0, 0, 0);
     if (sys->InSub(pos)) {
         auto ball = CreateBall(pos, ballMat, &ballId, mass, inertia, gran_radius);
-        sys->AddBody(ball);
+        sys->AddBodyTrust(ball);
     }
-    sys->IncrementGID();
+    sys->IncrementNumBodiesGlobal();
 
     return 1;
 }

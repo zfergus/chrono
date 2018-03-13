@@ -134,7 +134,6 @@ void AddContainer(ChSystemDistributed* sys) {
     bin->SetCollide(true);
     bin->SetBodyFixed(true);
     sys->AddBodyAllRanks(bin);
-    sys->IncrementGID();
 
     auto cb = new ChBoundary(bin);
     // Floor
@@ -195,9 +194,9 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     for (int i = 0; i < points.size(); i++) {
         if (sys->InSub(points[i])) {
             auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBody(ball);
+            sys->AddBodyTrust(ball);
         }
-        sys->IncrementGID();
+        sys->IncrementNumBodiesGlobal();
     }
 
     return points.size();

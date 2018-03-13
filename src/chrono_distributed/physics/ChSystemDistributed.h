@@ -59,17 +59,16 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Returns the distance into the neighboring sub-domain that is considered shared.
     double GetGhostLayer() const { return ghost_layer; }
 
-    /// A running count of the number of global bodies for
-    /// identification purposes
+    /// Return the current global number of bodies in the system.
     int GetNumBodiesGlobal() const { return num_bodies_global; }
 
-    /// Should be called every add to the GLOBAL system i.e. regardless of whether
-    /// the body in question is retained by the system on a particular rank, this
-    /// should be called after an AddBody call.
-    int IncrementGID() { return num_bodies_global++; }
+    /// Increment the global number of bodies. 
+    /// This function should be called *on all ranks* after a call to AddBodyTrust.
+    /// Do not call this function after AddBody or AddBodyAllRanks, as these increment the counter themselves.
+    void IncrementNumBodiesGlobal() { num_bodies_global++; }
 
-    /// Returns true if pos is within this rank's sub-domain.
-    bool InSub(ChVector<double> pos) const;
+    /// Return true if pos is within this rank's sub-domain.
+    bool InSub(const ChVector<double>& pos) const;
 
     /// Create a new body, consistent with the contact method and collision model used by this system.
     /// The returned body is not added to the system.
@@ -79,15 +78,23 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// collision model used by this system.  The returned body is not added to the system.
     virtual ChBodyAuxRef* NewBodyAuxRef() override;
 
-    /// Add a body to the system. Should be called on every rank for every body.
-    /// Classifies the body and decides whether or not to keep it on this rank.
+    /// Add a body to the system. 
+    /// This function should be called *on all ranks*.
+    /// AddBody classifies the body and decides whether or not to keep it on each rank.
     virtual void AddBody(std::shared_ptr<ChBody> newbody) override;
 
-    /// Adds a body to the system regardless of its location. Should only be called
-    /// if the caller needs a body added to the entire system. NOTE: A body crossing
-    /// multiple sub-domains will not be correctly advanced.
+    /// Add a body to the system on all ranks, regardless of its location.
+    /// This body should not have associated collision geometry.
+    /// NOTE: A body crossing multiple sub-domains will not be correctly advanced.
     void AddBodyAllRanks(std::shared_ptr<ChBody> body);
 
+    /// Add the specified body on each rank on which the function is called.
+    /// This function is provided as a more efficient mechanism for initializing large numbers
+    /// of bodies in a distributed system (as the ChBody objects need not be created on all ranks, 
+    /// but rather only on those ranks covering the subdomain in which the body is initially
+    /// located).  See InSub() to decide if a 3D location is within a rank's subdomain.
+    /// NOTE: after calling this function on a rank, it is the user's responsibility to increment
+    /// the global number of bodies *on all ranks*, through a call to IncrementNumBodiesGlobal.
     void AddBodyTrust(std::shared_ptr<ChBody> newbody);
 
     /// Removes a body from the simulation based on the ID of the body (not based on

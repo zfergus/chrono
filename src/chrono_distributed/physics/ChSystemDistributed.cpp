@@ -117,7 +117,7 @@ ChSystemDistributed::~ChSystemDistributed() {
     // delete ddm;
 }
 
-bool ChSystemDistributed::InSub(ChVector<double> pos) const {
+bool ChSystemDistributed::InSub(const ChVector<double>& pos) const {
     int split_axis = domain->GetSplitAxis();
 
     double pos_axis = pos[split_axis];
@@ -161,6 +161,8 @@ ChBodyAuxRef* ChSystemDistributed::NewBodyAuxRef() {
 
 void ChSystemDistributed::AddBodyAllRanks(std::shared_ptr<ChBody> newbody) {
     newbody->SetGid(num_bodies_global);
+    num_bodies_global++;
+
     distributed::COMM_STATUS status = distributed::GLOBAL;
 
     ddm->body_shape_start.push_back(0);
@@ -188,6 +190,16 @@ void ChSystemDistributed::AddBodyAllRanks(std::shared_ptr<ChBody> newbody) {
 }
 
 void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
+    // Add body on the rank whose sub-domain contains the current body position.
+    if (InSub(newbody->GetPos())) {
+        AddBodyTrust(newbody);
+    }
+
+    // Increment global body ID counter.
+    num_bodies_global++;
+}
+
+void ChSystemDistributed::AddBodyTrust(std::shared_ptr<ChBody> newbody) {
     newbody->SetGid(num_bodies_global);
     distributed::COMM_STATUS status = domain->GetBodyRegion(newbody);
 
@@ -215,6 +227,7 @@ void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
     if (status == distributed::UNOWNED_UP || status == distributed::UNOWNED_DOWN) {
         return;
     }
+
     // Makes space for shapes TODO Does this work for mid-simulation add by user?
     ddm->body_shape_start.push_back(0);
     ddm->body_shape_count.push_back(0);
@@ -230,7 +243,7 @@ void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
     data_manager->num_rigid_bodies++;
     newbody->SetSystem(this);  // TODO Syncs collision model
 
-    // actual data is set in UpdateBodies().
+    // Actual data is set in UpdateBodies().
     data_manager->host_data.pos_rigid.push_back(real3());
     data_manager->host_data.rot_rigid.push_back(quaternion());
     data_manager->host_data.active_rigid.push_back(true);

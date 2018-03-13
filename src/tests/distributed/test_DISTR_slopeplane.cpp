@@ -143,7 +143,6 @@ void AddSlopedWall(ChSystemDistributed* sys) {
     ChVector<double> n = u.Cross(w);
 
     sys->AddBodyAllRanks(container);
-    sys->IncrementGID();
 
     auto boundary = new ChBoundary(container);
     boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)), ChVector2<>(100 * gran_radius, 100 * gran_radius));
@@ -196,9 +195,9 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     for (int i = 0; i < points.size(); i++) {
         if (sys->InSub(points[i])) {
             auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBody(ball);
+            sys->AddBodyTrust(ball);
         }
-        sys->IncrementGID();
+        sys->IncrementNumBodiesGlobal();
     }
 
     return points.size();
