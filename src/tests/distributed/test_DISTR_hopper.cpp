@@ -156,6 +156,8 @@ int GetGeometry(int id, ChBody* body, double r) {
             my_abort();
             break;
     }
+
+    return 0;
 }
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
