@@ -22,7 +22,7 @@ void AddTrisphere(ChBody* body, double radius) {
 
 // Adds a large sphere on one side of the model and a small sphere on the other
 void AddAsymmetricBisphere(ChBody* body, double radius) {
-    utils::AddSphereGeometry(body, 2.0 * radius / 5, ChVector<>(-radius / 5.0, 0, 0));
+    utils::AddSphereGeometry(body, 4.0 * radius / 5, ChVector<>(-radius / 5.0, 0, 0));
     utils::AddSphereGeometry(body, 2.0 * radius / 5.0, ChVector<>(3.0 * radius / 5.0, 0, 0));
 }
 
@@ -30,5 +30,5 @@ void AddAsymmetricBisphere(ChBody* body, double radius) {
 void AddSnowman(ChBody* body, double radius) {
     utils::AddSphereGeometry(body, 4.0 * radius / 7.0, ChVector<>(-3.0 * radius / 7.0, 0, 0));
     utils::AddSphereGeometry(body, 2.0 * radius / 7.0, ChVector<>(3.0 * radius / 7.0, 0, 0));
-    utils::AddSphereGeometry(body, radius / 7.0, ChVector<>(6.0 * radius / 7.0));
+    utils::AddSphereGeometry(body, radius / 7.0, ChVector<>(6.0 * radius / 7.0, 0, 0));
 }
