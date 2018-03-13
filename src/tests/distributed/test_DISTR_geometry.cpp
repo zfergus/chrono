@@ -327,7 +327,7 @@ int main(int argc, char* argv[]) {
     // Create objects
     AddContainer(&my_sys);
     int actual_num_bodies = AddFallingBalls(&my_sys);
-    MPI_Barrier(my_sys.GetMPIWorld());
+    MPI_Barrier(my_sys.GetCommunicator());
     if (my_rank == MASTER)
         std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
 

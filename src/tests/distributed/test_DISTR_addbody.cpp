@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         num_balls = AddBalls(&my_sys);
     else
         num_balls = AddBallsTrust(&my_sys);
-    MPI_Barrier(my_sys.GetMPIWorld());
+    MPI_Barrier(my_sys.GetCommunicator());
     double elapsed = MPI_Wtime() - t_start;
 
     if (my_rank == 0) {

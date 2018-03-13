@@ -682,7 +682,7 @@ void ChCommDistributed::Exchange() {
     delete[] recv_shapes_down;
     delete[] recv_shapes_up;
 
-    MPI_Barrier(my_sys->GetMPIWorld());
+    MPI_Barrier(my_sys->world);
 }
 
 void ChCommDistributed::PackExchange(BodyExchange* buf, int index) {

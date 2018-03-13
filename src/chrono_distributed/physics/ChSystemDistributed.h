@@ -46,6 +46,9 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     ChSystemDistributed(MPI_Comm communicator, double ghostlayer, unsigned int maxobjects);
     virtual ~ChSystemDistributed();
 
+    /// Return the system's MPI intra-communicator.
+    MPI_Comm GetCommunicator() const { return world; }
+
     /// Return the size of the group associated with the system's intra-communicator.
     int GetCommSize() const { return num_ranks; }
 
@@ -139,9 +142,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Prints measures for computing efficiency.
     void PrintEfficiency();
-
-    /// Returns the MPI communicator being used by the system.
-    MPI_Comm GetMPIWorld() const { return world; }
 
     /// Central data storages for chrono_distributed. Adds scaffolding data
     /// around ChDataManager used by chrono_parallel in order to maintain

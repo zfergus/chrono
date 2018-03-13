@@ -404,13 +404,13 @@ int main(int argc, char* argv[]) {
 
     auto cb = AddContainer(&my_sys);
     auto actual_num_bodies = AddFallingBalls(&my_sys);
-    MPI_Barrier(my_sys.GetMPIWorld());
+    MPI_Barrier(my_sys.GetCommunicator());
 
     if (my_rank == MASTER)
         std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
 
     // Once the directory has been created, all ranks can make their output files
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(my_sys.GetCommunicator());
     std::string out_file_name = outdir + "/Rank" + std::to_string(my_rank) + ".csv";
     outfile.open(out_file_name);
     outfile << "t,gid,x,y,z,U\n" << std::flush;
