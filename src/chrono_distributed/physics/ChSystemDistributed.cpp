@@ -29,8 +29,8 @@
 #include "chrono/physics/ChBody.h"
 
 #include "chrono_distributed/ChDistributedDataManager.h"
-#include "chrono_distributed/collision/ChCollisionSystemDistributed.h"
 #include "chrono_distributed/collision/ChCollisionModelDistributed.h"
+#include "chrono_distributed/collision/ChCollisionSystemDistributed.h"
 #include "chrono_distributed/other_types.h"
 #include "chrono_distributed/physics/ChDomainDistributed.h"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
@@ -238,7 +238,7 @@ void ChSystemDistributed::AddBodyTrust(std::shared_ptr<ChBody> newbody) {
     ddm->gid_to_localid[newbody->GetGid()] = newbody->GetId();
 
     data_manager->num_rigid_bodies++;
-    newbody->SetSystem(this);  // TODO Syncs collision model
+    newbody->SetSystem(this);  // NOTE Syncs collision model
 
     // Actual data is set in UpdateBodies().
     data_manager->host_data.pos_rigid.push_back(real3());
@@ -370,7 +370,7 @@ void ChSystemDistributed::PrintShapeData() {
                             data_manager->shape_data.sphere_rigid[data_manager->shape_data.start_rigid[shape_index]]);
                         break;
                     case chrono::collision::BOX:
-                        printf("%d | Box: ", my_rank);  // TODO
+                        printf("%d | Box: ", my_rank);
                         break;
                     default:
                         printf("Undefined Shape, ");
@@ -520,7 +520,6 @@ void ChSystemDistributed::SetBodyState(uint gid, const BodyState& state) {
     }
 }
 
-// TODO: test
 void ChSystemDistributed::SetSphereShapes(const std::vector<uint>& gids,
                                           const std::vector<int>& shape_idx,
                                           const std::vector<double>& radii) {
@@ -631,15 +630,21 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
     }
 
     MPI_Status stat;
-    MPI_Wait(&r_bar, &stat);
+    MPI_Wait(&r_bar, &stat);  // Wait for completion of all sending
     std::vector<std::pair<uint, ChVector<double>>> forces;
 
+    // At this point, buf holds all forces on master_rank
+
+    // If no forces were found, return a vector with only GID == UINT_MAX
     if (!found_contact) {
         forces.push_back(std::pair<uint, ChVector<>>(UINT_MAX, ChVector<>(0)));
         return forces;
     }
 
-    // TODO: Assemble return vector
+    for (int i = 0; i < num_gids; i++) {
+        forces.push_back(std::pair<uint, ChVector<double>>(
+            buf[i].gid, ChVector<>(buf[i].force[0], buf[i].force[1], buf[i].force[2])));
+    }
 
     delete[] buf;
     return forces;

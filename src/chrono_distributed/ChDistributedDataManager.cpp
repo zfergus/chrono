@@ -32,6 +32,7 @@ int ChDistributedDataManager::GetLocalIndex(unsigned int gid) {
     return -1;
 }
 
+// TODO replace
 void ChDistributedDataManager::DefragmentFreeList() {
     struct LocalShapeNode* curr = local_free_shapes;
     if (curr == NULL)
