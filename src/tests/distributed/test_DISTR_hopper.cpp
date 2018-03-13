@@ -109,6 +109,8 @@ int GetGeometry(int id, ChBody* body) {
             MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
             break;
     }
+
+    return 0;
 }
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
