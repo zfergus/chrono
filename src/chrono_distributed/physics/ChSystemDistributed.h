@@ -44,8 +44,8 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     friend class ChCommDistributed;
 
   public:
-    /// world specifies on which MPI_Comm the simulation should run.
-    ChSystemDistributed(MPI_Comm world, double ghost_layer, unsigned int max_objects);
+    /// Construct a distributed Chrono system using the specified MPI communicator.
+    ChSystemDistributed(MPI_Comm communicator, double ghost_layer, unsigned int max_objects);
     virtual ~ChSystemDistributed();
 
     /// Returns the number of MPI ranks the system is using.
@@ -70,6 +70,14 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Returns true if pos is within this rank's sub-domain.
     bool InSub(ChVector<double> pos);
+
+    /// Create a new body, consistent with the contact method and collision model used by this system.
+    /// The returned body is not added to the system.
+    virtual ChBody* NewBody() override;
+
+    /// Create a new body with non-centroidal reference frame, consistent with the contact method and
+    /// collision model used by this system.  The returned body is not added to the system.
+    virtual ChBodyAuxRef* NewBodyAuxRef() override;
 
     /// Add a body to the system. Should be called on every rank for every body.
     /// Classifies the body and decides whether or not to keep it on this rank.

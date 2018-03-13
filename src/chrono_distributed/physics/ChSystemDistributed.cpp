@@ -30,6 +30,7 @@
 
 #include "chrono_distributed/ChDistributedDataManager.h"
 #include "chrono_distributed/collision/ChCollisionSystemDistributed.h"
+#include "chrono_distributed/collision/ChCollisionModelDistributed.h"
 #include "chrono_distributed/other_types.h"
 #include "chrono_distributed/physics/ChDomainDistributed.h"
 #include "chrono_distributed/physics/ChSystemDistributed.h"
@@ -148,6 +149,14 @@ void ChSystemDistributed::UpdateRigidBodies() {
     for (int i = 0; i < bodylist.size(); i++) {
         ddm->global_id[i] = bodylist[i]->GetGid();
     }
+}
+
+ChBody* ChSystemDistributed::NewBody() {
+    return new ChBody(std::make_shared<collision::ChCollisionModelDistributed>(), ChMaterialSurface::SMC);
+}
+
+ChBodyAuxRef* ChSystemDistributed::NewBodyAuxRef() {
+    return new ChBodyAuxRef(std::make_shared<collision::ChCollisionModelDistributed>(), ChMaterialSurface::SMC);
 }
 
 void ChSystemDistributed::AddBodyAllRanks(std::shared_ptr<ChBody> newbody) {
