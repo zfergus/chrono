@@ -504,19 +504,13 @@ int ChSystemDistributed::RemoveBodiesBelow(double z) {
     return final_count;
 }
 
-void ChSystemDistributed::SetBodyStates(std::vector<uint> gids, std::vector<BodyState> states) {
-    for (uint i = 0; i < gids.size(); i++) {
-        int local_id = ddm->GetLocalIndex(gids[i]);
-        if (local_id != -1 && ddm->comm_status[local_id] != distributed::EMPTY) {
-            bodylist[local_id]->SetPos(states[i].pos);
-            bodylist[local_id]->SetRot(states[i].rot);
-            bodylist[local_id]->SetPos_dt(states[i].pos_dt);
-            bodylist[local_id]->SetRot_dt(states[i].rot_dt);
-        }
+void ChSystemDistributed::SetBodyStates(const std::vector<uint>& gids, const std::vector<BodyState>& states) {
+    for (size_t i = 0; i < gids.size(); i++) {
+        SetBodyState(gids[i], states[i]);
     }
 }
 
-void ChSystemDistributed::SetBodyState(uint gid, BodyState state) {
+void ChSystemDistributed::SetBodyState(uint gid, const BodyState& state) {
     int local_id = ddm->GetLocalIndex(gid);
     if (local_id != -1 && ddm->comm_status[local_id] != distributed::EMPTY) {
         bodylist[local_id]->SetPos(state.pos);
@@ -527,17 +521,11 @@ void ChSystemDistributed::SetBodyState(uint gid, BodyState state) {
 }
 
 // TODO: test
-void ChSystemDistributed::SetSphereShapes(std::vector<uint> gids,
-                                          std::vector<int> shape_idx,
-                                          std::vector<double> radii) {
-    for (uint i = 0; i < gids.size(); i++) {
-        int local_id = ddm->GetLocalIndex(gids[i]);
-        if (local_id != -1 && ddm->comm_status[local_id] != distributed::EMPTY) {
-            int ddm_start = ddm->body_shape_start[local_id];
-            int dm_start = ddm->body_shapes[ddm_start + shape_idx[i]];  // index in data_manager of the desired shape
-            int sphere_start = data_manager->shape_data.start_rigid[dm_start];
-            data_manager->shape_data.sphere_rigid[sphere_start] = radii[i];
-        }
+void ChSystemDistributed::SetSphereShapes(const std::vector<uint>& gids,
+                                          const std::vector<int>& shape_idx,
+                                          const std::vector<double>& radii) {
+    for (size_t i = 0; i < gids.size(); i++) {
+        SetSphereShape(gids[i], shape_idx[i], radii[i]);
     }
 }
 
@@ -551,24 +539,15 @@ void ChSystemDistributed::SetSphereShape(uint gid, int shape_idx, double radius)
     }
 }
 
-void ChSystemDistributed::SetTriangleShapes(std::vector<uint> gids,
-                                            std::vector<int> shape_idx,
-                                            std::vector<TriData> new_shapes) {
-    for (uint i = 0; i < gids.size(); i++) {
-        int local_id = ddm->GetLocalIndex(gids[i]);
-        if (local_id != -1 && ddm->comm_status[local_id] != distributed::EMPTY) {
-            int ddm_start = ddm->body_shape_start[local_id];
-            int dm_start = ddm->body_shapes[ddm_start + shape_idx[i]];  // index in data_manager of the desired shape
-            int triangle_start = data_manager->shape_data.start_rigid[dm_start];
-            TriData& tri = new_shapes[i];
-            data_manager->shape_data.triangle_rigid[triangle_start] = real3(tri.v1.x(), tri.v1.y(), tri.v1.z());
-            data_manager->shape_data.triangle_rigid[triangle_start + 1] = real3(tri.v2.x(), tri.v2.y(), tri.v2.z());
-            data_manager->shape_data.triangle_rigid[triangle_start + 2] = real3(tri.v3.x(), tri.v3.y(), tri.v3.z());
-        }
+void ChSystemDistributed::SetTriangleShapes(const std::vector<uint>& gids,
+                                            const std::vector<int>& shape_idx,
+                                            const std::vector<TriData>& new_shapes) {
+    for (size_t i = 0; i < gids.size(); i++) {
+        SetTriangleShape(gids[i], shape_idx[i], new_shapes[i]);
     }
 }
 
-void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, TriData new_shape) {
+void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, const TriData& new_shape) {
     int local_id = ddm->GetLocalIndex(gid);
     if (local_id != -1 && ddm->comm_status[local_id] != distributed::EMPTY) {
         int ddm_start = ddm->body_shape_start[local_id];
@@ -584,7 +563,7 @@ void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, TriData new_
 }
 
 // TODO: only return for bodies with nonzero contact force
-std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(std::vector<uint> gids) {
+std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(const std::vector<uint>& gids) {
     bool found_contact = false;
     // Gather forces on specified bodies
     std::vector<internal_force> send;

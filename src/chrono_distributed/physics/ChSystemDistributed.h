@@ -187,15 +187,16 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// layer of this system.
     /// NOTE: The new states will reach the data_manager at the beginning of the
     /// next time step.
-    void SetBodyStates(std::vector<uint> gids, std::vector<BodyState> states);
-    void SetBodyState(uint gid, BodyState state);
+    void SetBodyStates(const std::vector<uint>& gids, const std::vector<BodyState>& states);
+    void SetBodyState(uint gid, const BodyState& state);
 
     /// Updates each sphere shape associated with bodies with global ids gids.
-    /// shape_idx identifies the index of the shape within its body's collisionsystem
-    /// model.
+    /// shape_idx identifies the index of the shape within its body's collisionsystem model.
     /// Must be called on all system ranks and inputs must be complete and
     /// valid on each rank.
-    void SetSphereShapes(std::vector<uint> gids, std::vector<int> shape_idx, std::vector<double> radii);
+    void SetSphereShapes(const std::vector<uint>& gids,
+                         const std::vector<int>& shape_idx,
+                         const std::vector<double>& radii);
     void SetSphereShape(uint gid, int shape_idx, double radius);
 
     /// Structure of vertex data for a triangle in the bodies existing local frame
@@ -206,12 +207,13 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     } TriData;
 
     /// Updates triangle shapes associated with bodies identified by gids.
-    /// shape_idx identifies the index of the shape within its body's collisionsystem
-    /// model.
+    /// shape_idx identifies the index of the shape within its body's collisionsystem model.
     /// Must be called on all system ranks and inputs must be complete and
     /// valid on each rank.
-    void SetTriangleShapes(std::vector<uint> gids, std::vector<int> shape_idx, std::vector<TriData> new_shapes);
-    void SetTriangleShape(uint gid, int shape_idx, TriData new_shape);
+    void SetTriangleShapes(const std::vector<uint>& gids,
+                           const std::vector<int>& shape_idx,
+                           const std::vector<TriData>& new_shapes);
+    void SetTriangleShape(uint gid, int shape_idx, const TriData& new_shape);
 
     /// Structure of force data used internally for MPI sending contact forces.
     typedef struct internal_force {
@@ -224,7 +226,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// on each rank.
     /// Returns a pair with gid == UINT_MAX if there are the gid if no contact
     /// force is found.
-    std::vector<std::pair<uint, ChVector<>>> GetBodyContactForces(std::vector<uint> gids);
+    std::vector<std::pair<uint, ChVector<>>> GetBodyContactForces(const std::vector<uint>& gids);
     std::pair<uint, ChVector<>> GetBodyContactForce(uint gid);
 
   protected:
