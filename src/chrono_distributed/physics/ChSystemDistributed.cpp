@@ -49,8 +49,8 @@ static void PrintNode(LocalShapeNode* node) {
               << "| ---> ";
 }
 
-ChSystemDistributed::ChSystemDistributed(MPI_Comm world, double ghost_layer, unsigned int max_objects) {
-    this->world = world;
+ChSystemDistributed::ChSystemDistributed(MPI_Comm communicator, double ghost_layer, unsigned int max_objects) {
+    MPI_Comm_dup(communicator, &world);
     MPI_Comm_size(world, &num_ranks);
     MPI_Comm_rank(world, &my_rank);
     master_rank = 0;  // TODO Does this need to do anything else?
