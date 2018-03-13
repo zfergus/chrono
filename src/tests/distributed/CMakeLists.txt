@@ -15,13 +15,14 @@ set(TESTS
     test_DISTR_slopeplane
     test_DISTR_setstate
     test_DISTR_getforces
+    test_DISTR_addbody
 )
 
 set(TESTS_OPENGL
     test_DISTR_boundary_par
     test_DISTR_slopeplane_par
     test_DISTR_hopper_par
-	test_PAR_hopper
+    test_PAR_hopper
 )
 
 # ------------------------------------------------------------------------------
