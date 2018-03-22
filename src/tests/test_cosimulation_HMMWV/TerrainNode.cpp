@@ -257,7 +257,8 @@ void TerrainNode::Construct() {
         int binsY = (int)std::ceil(m_hdimY / m_radius_g) / factor;
         int binsZ = 1;
         m_system->GetSettings()->collision.bins_per_axis = vec3(binsX, binsY, binsZ);
-        cout << m_prefix << " broad-phase bins: " << binsX << " x " << binsY << " x " << binsZ << endl;
+        if (m_verbose)
+            cout << m_prefix << " broad-phase bins: " << binsX << " x " << binsY << " x " << binsZ << endl;
     }
 
     // ------------------------------
@@ -390,7 +391,8 @@ void TerrainNode::Construct() {
         }
 
         m_num_particles = gen.getTotalNumBodies();
-        cout << m_prefix << " Generated particles:  " << m_num_particles << endl;
+        if (m_verbose)
+            cout << m_prefix << " Generated particles:  " << m_num_particles << endl;
     }
 
     // Cache the number of contact shapes that have been added so far to the parallel system.
@@ -516,8 +518,9 @@ void TerrainNode::Settle() {
             body->SetRot_dt(ChQuaternion<>(rot_dt.e0(), rot_dt.e1(), rot_dt.e2(), rot_dt.e3()));
         }
 
-        cout << m_prefix << " read checkpoint <=== " << checkpoint_filename << "   num. particles = " << num_particles
-             << endl;
+        if (m_verbose)
+            cout << m_prefix << " read checkpoint <=== " << checkpoint_filename
+                 << "   num. particles = " << num_particles << endl;
 
     } else {
         // -------------------------------------
@@ -535,8 +538,9 @@ void TerrainNode::Settle() {
             m_system->DoStepDynamics(m_step_size);
             m_timer.stop();
             m_cum_sim_time += m_timer();
-            cout << '\r' << std::fixed << std::setprecision(6) << m_system->GetChTime() << "  ["
-                 << m_timer.GetTimeSeconds() << "]" << std::flush;
+            if (m_verbose)
+                cout << '\r' << std::fixed << std::setprecision(6) << m_system->GetChTime() << "  ["
+                     << m_timer.GetTimeSeconds() << "]" << std::flush;
 
             // Output (if enabled)
             if (m_settling_output && is % output_steps == 0) {
@@ -561,7 +565,9 @@ void TerrainNode::Settle() {
 #endif
         }
 
-        cout << m_prefix << " settling time = " << m_cum_sim_time << endl;
+        if (m_verbose)
+            cout << m_prefix << " settling time = " << m_cum_sim_time << endl;
+
         m_cum_sim_time = 0;
     }
 
@@ -592,8 +598,10 @@ void TerrainNode::Initialize() {
     double init_dim[2] = {m_init_height, m_hdimX + 2 * m_hlenX};
     MPI_Send(init_dim, 2, MPI_DOUBLE, VEHICLE_NODE_RANK, 0, MPI_COMM_WORLD);
 
-    cout << m_prefix << " Sent initial terrain height = " << init_dim[0] << endl;
-    cout << m_prefix << " Sent container half-length = " << init_dim[1] << endl;
+    if (m_verbose) {
+        cout << m_prefix << " Sent initial terrain height = " << init_dim[0] << endl;
+        cout << m_prefix << " Sent container half-length = " << init_dim[1] << endl;
+    }
 
     // Adjust height of platform such that its top surface is at m_init_height
     auto& shape_pos = m_system->data_manager->shape_data.ObA_rigid;
@@ -647,7 +655,8 @@ void TerrainNode::Initialize() {
         start_vert_index += surf_props[0];
         start_tri_index += surf_props[1];
 
-        cout << m_prefix << " Received vertices = " << surf_props[0] << " triangles = " << surf_props[1] << endl;
+        if (m_verbose)
+            cout << m_prefix << " Received vertices = " << surf_props[0] << " triangles = " << surf_props[1] << endl;
 
         // Receive tire contact material properties.
         // Create the "tire" contact material, but defer using it until the proxy bodies are created.
@@ -683,7 +692,8 @@ void TerrainNode::Initialize() {
             }
         }
 
-        cout << m_prefix << " received tire material:  friction = " << mat_props[0] << endl;
+        if (m_verbose)
+            cout << m_prefix << " received tire material:  friction = " << mat_props[0] << endl;
 
         // -------------------
         // Create proxy bodies
@@ -858,7 +868,8 @@ void TerrainNode::Synchronize(int step_number, double time) {
     }
 
     msg += "]";
-    cout << m_prefix << msg << endl;
+    if (m_verbose)
+        cout << m_prefix << msg << endl;
 }
 
 // Set position and velocity of proxy bodies based on tire mesh vertices.
@@ -1106,7 +1117,8 @@ void TerrainNode::WriteCheckpoint() {
 
     std::string checkpoint_filename = m_out_dir + "/" + m_checkpoint_filename;
     csv.write_to_file(checkpoint_filename);
-    cout << m_prefix << " write checkpoint ===> " << checkpoint_filename << endl;
+    if (m_verbose)
+        cout << m_prefix << " write checkpoint ===> " << checkpoint_filename << endl;
 }
 
 // -----------------------------------------------------------------------------

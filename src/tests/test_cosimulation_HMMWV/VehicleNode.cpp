@@ -22,7 +22,6 @@
 #include <cmath>
 #include <algorithm>
 #include <set>
-#include "mpi.h"
 
 #include "chrono/ChConfig.h"
 #include "chrono/physics/ChLinkLock.h"
@@ -50,8 +49,6 @@ using namespace chrono::vehicle::hmmwv;
 VehicleNode::VehicleNode()
     : BaseNode("VEHICLE"), m_vehicle(nullptr), m_powertrain(nullptr), m_driver(nullptr), m_driver_type(DEFAULT_DRIVER) {
     m_prefix = "[Vehicle node]";
-
-    cout << m_prefix << " num_threads = 1" << endl;
 
     // ------------------------
     // Default model parameters
@@ -121,8 +118,10 @@ void VehicleNode::Initialize() {
     MPI_Status status;
     MPI_Recv(init_dim, 2, MPI_DOUBLE, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD, &status);
 
-    cout << m_prefix << " Received initial terrain height = " << init_dim[0] << endl;
-    cout << m_prefix << " Received container half-length = " << init_dim[1] << endl;
+    if (m_verbose) {
+        cout << m_prefix << " Received initial terrain height = " << init_dim[0] << endl;
+        cout << m_prefix << " Received container half-length = " << init_dim[1] << endl;
+    }
 
     // Set initial vehicle position and orientation
     double y_offset = 0;
@@ -247,7 +246,8 @@ void VehicleNode::Synchronize(int step_number, double time) {
         MPI_Send(bufWS, 14, MPI_DOUBLE, TIRE_NODE_RANK(iw), iw, MPI_COMM_WORLD);
     }
 
-    cout << m_prefix << " Driver inputs:   S = " << steering << " T = " << throttle << " B = " << braking << endl;
+    if (m_verbose)
+        cout << m_prefix << " Driver inputs:   S = " << steering << " T = " << throttle << " B = " << braking << endl;
 
     // Synchronize vehicle, powertrain, and driver
     m_vehicle->Synchronize(time, steering, braking, powertrain_torque, m_tire_forces);
@@ -311,7 +311,8 @@ void VehicleNode::OutputData(int frame) {
     WriteStateInformation(csv);            //
     csv.write_to_file(filename);
 
-    cout << m_prefix << " write output file ==> " << filename << endl;
+    if (m_verbose)
+        cout << m_prefix << " write output file ==> " << filename << endl;
     */
 }
 

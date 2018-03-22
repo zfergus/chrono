@@ -9,25 +9,18 @@ if(NOT ENABLE_MODULE_FEA OR NOT ENABLE_MODULE_MKL)
   return()
 endif()
 
-if(NOT ENABLE_MODULE_PARALLEL OR NOT ENABLE_MODULE_DISTRIBUTED)
-  return()
-endif()  
-
-if(NOT ENABLE_MODULE_OPENGL)
+if(NOT ENABLE_MODULE_PARALLEL)
   return()
 endif()  
 
 # ------------------------------------------------------------------------------
 
-include_directories( ${CH_MKL_INCLUDES} )
+include_directories(${CH_MKL_INCLUDES})
 include_directories(${CH_PARALLEL_INCLUDES})
-include_directories(${CH_DISTRIBUTED_INCLUDES})
 include_directories(${MPI_CXX_INCLUDE_PATH})
-include_directories(${CH_OPENGL_INCLUDES})
 
-set(COMPILER_FLAGS "${CH_CXX_FLAGS} ${CH_DISTRIBUTED_CXX_FLAGS}")
-
-set(LINKER_FLAGS "${CH_LINKERFLAG_EXE} ${CH_DISTRIBUTED_LINK_FLAGS}")
+set(COMPILER_FLAGS "${CH_CXX_FLAGS} ${CH_PARALLEL_CXX_FLAGS}")
+set(LINKER_FLAGS "${CH_LINKERFLAG_EXE}")
 
 set(LIBRARIES
     ChronoEngine
@@ -36,16 +29,28 @@ set(LIBRARIES
     ChronoEngine_fea
     ChronoEngine_mkl
     ChronoEngine_parallel
-    ChronoEngine_distributed
-    ChronoEngine_opengl
 )
+
+if(ENABLE_MODULE_OPENGL)
+    include_directories(${CH_OPENGL_INCLUDES})
+    set(LIBRARIES ${LIBRARIES} ChronoEngine_opengl)
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+       set(LINKER_FLAGS  "${LINKER_FLAGS} -framework IOKit -framework Cocoa -framework OpenGL")
+    endif()
+endif()
+
+if(ENABLE_MODULE_DISTRIBUTED)
+    include_directories(${CH_DISTRIBUTED_INCLUDES})
+    set(LIBRARIES ${LIBRARIES} ChronoEngine_distributed)
+    set(COMPILER_FLAGS "${COMPILER_FLAGS} ${CH_DISTRIBUTED_CXX_FLAGS}")
+    set(LINKER_FLAGS "${LINKER_FLAGS} ${CH_DISTRIBUTED_LINK_FLAGS}")
+endif()
 
 # ------------------------------------------------------------------------------
 
-set(PROGRAM test_cosimulation_HMMWV)
+set(PROGRAMS test_cosimulation_HMMWV)
 
 set(TEST_FILES 
-    test_cosimulation_HMMWV.cpp
     BaseNode.h
     BaseNode.cpp
     VehicleNode.h
@@ -54,18 +59,23 @@ set(TEST_FILES
     TireNode.cpp
     TerrainNode.h
     TerrainNode.cpp
-    #TerrainNodeDistr.h
-    #TerrainNodeDistr.cpp
     )
 
-source_group("" FILES ${TEST_FILES})
+if(ENABLE_MODULE_DISTRIBUTED)
+    set(PROGRAMS "${PROGRAMS}" test_cosimulation_HMMWV_DISTR)
+    set(TEST_FILES "${TEST_FILES}" TerrainNodeDistr.h TerrainNodeDistr.cpp)
+endif()
 
-message(STATUS "...add ${PROGRAM}")
+# ------------------------------------------------------------------------------
 
-add_executable(${PROGRAM} ${TEST_FILES})
+message(STATUS "Test programs for CO-SIMULATION...")
 
-set_target_properties(${PROGRAM} PROPERTIES 
-    COMPILE_FLAGS "${COMPILER_FLAGS}"
-    LINK_FLAGS "${LINKER_FLAGS}")
-
-target_link_libraries(${PROGRAM} ${LIBRARIES})
+foreach(PROGRAM ${PROGRAMS})
+    message(STATUS "...add ${PROGRAM}")
+    add_executable(${PROGRAM} ${PROGRAM}.cpp ${TEST_FILES})    
+    source_group("" FILES ${PROGRAM}.cpp ${TEST_FILES})
+    set_target_properties(${PROGRAM} PROPERTIES 
+                          COMPILE_FLAGS "${COMPILER_FLAGS}"
+                          LINK_FLAGS "${LINKER_FLAGS}")
+    target_link_libraries(${PROGRAM} ${LIBRARIES})
+endforeach()

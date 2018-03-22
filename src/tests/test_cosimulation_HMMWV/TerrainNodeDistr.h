@@ -9,7 +9,7 @@
 // http://projectchrono.org/license-chrono.txt.
 //
 // =============================================================================
-// Authors: Radu Serban, Antonio Recuero
+// Authors: Radu Serban
 // =============================================================================
 //
 // Definition of the TERRAIN NODE.
@@ -29,33 +29,44 @@
 #include "chrono/utils/ChUtilsInputOutput.h"
 
 #include "chrono_distributed/physics/ChSystemDistributed.h"
+#include "chrono_distributed/collision/ChBoundary.h"
 
 #include "BaseNode.h"
 
 // =============================================================================
 
+namespace cosim {
+
+    /// Initialize the co-simulation framework.
+    /// MUST be called on all ranks.
+    /// Returns MPI_SUCCESS if successful and MPI_ERR_OTHER if there are not enough ranks.
+    int Initialize(int num_tires);
+
+    /// Return true if the co-simulation framework was initialized and false otherwise.
+    bool IsInitialized();
+
+    /// Return the MPI communicator for distributed terrain simulation.
+    MPI_Comm GetTerrainIntracommunicator();
+
+};  // namespace cosim
+
+// =============================================================================
+
 class TerrainNodeDistr : public BaseNode {
   public:
-    enum Type { RIGID, GRANULAR };
-
-    TerrainNodeDistr(Type type,                                        ///< terrain type (RIGID or GRANULAR)
-                     int num_tires,                                    ///< number of vehicle tires
-                     bool use_checkpoint,                              ///< initialize granular terrain from checkpoint
-                     bool render,                                      ///< use OpenGL rendering
-                     int num_threads                                   ///< number of OpenMP threads
+    TerrainNodeDistr(MPI_Comm terrain_comm,  ///< intra-communicator for terrain simulation
+                     int num_tires,          ///< number of vehicle tires
+                     bool render,            ///< use OpenGL rendering
+                     int num_threads         ///< number of OpenMP threads
     );
     ~TerrainNodeDistr();
 
     /// Set container dimensions.
-    void SetContainerDimensions(double length,    ///< length in X direction (default: 2)
-                                double width,     ///< width in Y direction (default: 0.5)
-                                double height,    ///< height in Z direction (default: 1)
-                                double thickness  ///< wall thickness (default: 0.2)
-                                );
-
-    /// Set rear platform length.
-    void SetPlatformLength(double length  ///< length in X direction (default: 0)
-                           );
+    void SetContainerDimensions(double length,  ///< length in X direction (default: 2)
+                                double width,   ///< width in Y direction (default: 0.5)
+                                double height,  ///< height in Z direction (default: 1)
+                                int split_axis  ///< split direction for domain decomposition (default: 0 -- x-axis)
+    );
 
     /// Set properties of granular material.
     /// Note that this settings are only relevant when using GRANULAR terrain.
@@ -64,31 +75,21 @@ class TerrainNodeDistr : public BaseNode {
                              int num_layers   ///< number of generated particle layers (default: 5)
                              );
 
-    /// Set properties of proxy bodies (rigid terrain).
-    /// When using rigid terrain, the proxy bodies are contact spheres.
-    void SetProxyProperties(double mass,    ///< mass of a proxy body (default: 1)
-                            double radius,  ///< contact radius of a proxy body (default: 0.01)
-                            bool fixed      ///< proxies fixed to ground? (default: false)
-                            );
-
-    /// Set properties of proxy bodies (granular terrain).
-    /// When using granular terrain, the proxy bodies are contact triangles.
+    /// Set properties of proxy bodies.
     void SetProxyProperties(double mass,  ///< mass of a proxy body (default: 1)
                             bool fixed    ///< proxies fixed to ground? (default: false)
                             );
 
     /// Set the material properties for terrain.
-    /// The type of material must be consistent with the contact method (penalty or complementarity)
-    /// specified at construction. These parameters characterize the material for the container and
-    /// (if applicable) the granular material.  Tire contact material is received from one of the tire nodes.
-    void SetMaterialSurface(const std::shared_ptr<chrono::ChMaterialSurface>& mat);
+    /// These parameters characterize the material for the container and the granular material.
+    /// Tire contact material is received from one of the tire nodes.
+    void SetMaterialSurface(const std::shared_ptr<chrono::ChMaterialSurfaceSMC>& mat);
 
     /// Specify whether contact coefficients are based on material properties (default: true).
     /// Note that this setting is only relevant when using the penalty method.
     void UseMaterialProperties(bool flag);
 
     /// Set the normal contact force model (default: Hertz)
-    /// Note that this setting is only relevant when using the penalty method.
     void SetContactForceModel(chrono::ChSystemSMC::ContactForceModel model);
 
     /// Set simulation length for settling of granular material (default: 0.4).
@@ -123,25 +124,12 @@ class TerrainNodeDistr : public BaseNode {
     /// Obtain settled terrain configuration.
     /// For granular terrain, this can be obtained either through simulation or by initializing
     /// particles from a previously generated checkpointing file.
-    void Settle();
+    void Settle(bool use_checkpoint);
 
     /// Write checkpointing file.
     void WriteCheckpoint();
 
   private:
-    /// Triangle vertex indices.
-    struct Triangle {
-        int v1;
-        int v2;
-        int v3;
-    };
-
-    /// Mesh vertex state.
-    struct VertexState {
-        chrono::ChVector<> pos;
-        chrono::ChVector<> vel;
-    };
-
     /// Association between a proxy body and a mesh index.
     /// The body can be associated with either a mesh vertex or a mesh triangle.
     struct ProxyBody {
@@ -153,41 +141,37 @@ class TerrainNodeDistr : public BaseNode {
     ///
     struct TireData {
         std::shared_ptr<chrono::ChMaterialSurface> m_material_tire;  ///< material properties for proxy bodies
-        std::vector<ProxyBody> m_proxies;          ///< list of proxy bodies with associated mesh index
-        std::vector<VertexState> m_vertex_states;  ///< mesh vertex states
-        std::vector<Triangle> m_triangles;         ///< tire mesh connectivity
-        unsigned int m_num_vert;                   ///< number of tire mesh vertices
-        unsigned int m_num_tri;                    ///< number of tire mesh triangles
-        unsigned int m_start_vert;                 ///< start vertex index for proxy body identifiers
-        unsigned int m_start_tri;                  ///< start triangle index for proxy body identifiers
+        std::vector<ProxyBody> m_proxies;                ///< list of proxy bodies with associated mesh index
+        std::vector<uint> m_gids;                        ///< global indices of proxy bodies
+        std::vector<chrono::ChVector<>> m_vertex_pos;    ///< mesh vertex positions
+        std::vector<chrono::ChVector<>> m_vertex_vel;    ///< mesh vertex velocities
+        std::vector<chrono::ChVector<int>> m_triangles;  ///< tire mesh connectivity
+        unsigned int m_num_vert;                         ///< number of tire mesh vertices
+        unsigned int m_num_tri;                          ///< number of tire mesh triangles
+        unsigned int m_start_vert;                       ///< start vertex index for proxy body identifiers
+        unsigned int m_start_tri;                        ///< start triangle index for proxy body identifiers
     };
 
-    Type m_type;  ///< terrain type (RIGID or GRANULAR)
+    int m_world_rank;    ///< process rank in MPI_COMM_WORLD
+    int m_terrain_rank;  ///< process rank in Chrono::Distributed intra-communicator
 
     chrono::ChSystemDistributed* m_system;  ///< containing system
-    bool m_constructed;                  ///< system construction completed?
+    bool m_constructed;                     ///< system construction completed?
 
-    std::shared_ptr<chrono::ChMaterialSurface> m_material_terrain;  ///< material properties for terrain bodies
+    std::shared_ptr<chrono::ChMaterialSurfaceSMC> m_material_terrain;  ///< material properties for terrain bodies
 
     int m_num_tires;                    ///< number of vehicle tires
-    bool m_fixed_proxies;               ///< flag indicating whether or not proxy bodies are fixed to ground
     std::vector<TireData> m_tire_data;  ///< data for the vehicle tire proxies
 
-    std::shared_ptr<chrono::ChBody> m_platform;  ///< platform rigid body
+    double m_hdimX;    ///< container half-length (X direction)
+    double m_hdimY;    ///< container half-width (Y direction)
+    double m_hdimZ;    ///< container half-height (Z direction)
 
-    double m_hlenX;   ///< rear platform half-length (X direction)
-    double m_hdimX;   ///< container half-length (X direction)
-    double m_hdimY;   ///< container half-width (Y direction)
-    double m_hdimZ;   ///< container half-height (Z direction)
-    double m_hthick;  ///< container wall half-thickness
+    std::shared_ptr<chrono::ChBoundary> m_boundary;  ///< custom collision for container
 
-    double m_mass_pN;    ///< mass of a spherical proxy body
-    double m_radius_pN;  ///< radius of a spherical proxy body
-    double m_mass_pF;    ///< mass of a triangular proxy body
+    bool m_fixed_proxies;  ///< flag indicating whether or not proxy bodies are fixed to ground
+    double m_mass_pF;      ///< mass of a triangular proxy body
 
-    double m_init_height;  ///< initial terrain height (after optional settling)
-
-    bool m_use_checkpoint;         ///< initialize granular terrain from checkpoint file
     int m_Id_g;                    ///< first identifier for granular material bodies
     int m_num_layers;              ///< number of generated particle layers
     unsigned int m_num_particles;  ///< number of granular material bodies
@@ -198,10 +182,8 @@ class TerrainNodeDistr : public BaseNode {
     bool m_settling_output;  ///< output files during settling?
 
     int m_particles_start_index;       ///< start index for granular material bodies in system body list
-    unsigned int m_proxy_start_index;  ///< start index for proxy contact shapes in global arrays
 
-    bool m_render_path;                             ///< if true, render the Bezier curve
-    std::shared_ptr<chrono::ChBezierCurve> m_path;  ///< path for closed-loop driver (for rendering only)
+    std::shared_ptr<chrono::ChBezierCurve> m_path;  ///< path for closed-loop driver (for rendering only, may be empty)
 
     bool m_render;  ///< if true, use OpenGL rendering
 
@@ -209,23 +191,20 @@ class TerrainNodeDistr : public BaseNode {
 
     // Private methods
 
+    bool OnMaster() { return m_system->OnMaster(); }
+
     void Construct();
 
-    void CreateNodeProxies(int which);
     void CreateFaceProxies(int which);
 
-    void UpdateNodeProxies(int which);
     void UpdateFaceProxies(int which);
 
-    void ForcesNodeProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices);
     void ForcesFaceProxies(int which, std::vector<double>& vert_forces, std::vector<int>& vert_indices);
 
     void WriteParticleInformation(chrono::utils::CSV_writer& csv);
 
-    void PrintNodeProxiesUpdateData(int which);
     void PrintFaceProxiesUpdateData(int which);
 
-    void PrintNodeProxiesContactData(int which);
     void PrintFaceProxiesContactData(int which);
 
     static chrono::ChVector<> CalcBarycentricCoords(const chrono::ChVector<>& v1,

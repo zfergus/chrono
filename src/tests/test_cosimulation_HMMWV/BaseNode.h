@@ -22,15 +22,17 @@
 #ifndef HMMWV_COSIM_BASENODE_H
 #define HMMWV_COSIM_BASENODE_H
 
+#include <mpi.h>
 #include <fstream>
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "chrono/core/ChTimer.h"
 
+/// Ranks (within MPI_COMMM_WORLD) of the processes involved in co-simulation communication.
 #define VEHICLE_NODE_RANK 0
 #define TERRAIN_NODE_RANK 1
-#define TIRE_NODE_RANK(i) (i+2)
+#define TIRE_NODE_RANK(i) (i + 2)
 
 class BaseNode {
   public:
@@ -77,6 +79,9 @@ class BaseNode {
     /// Output logging and debugging data.
     virtual void OutputData(int frame) {}
 
+    /// Control log detail
+    void SetVerbose(bool val) { m_verbose = val; }
+
   protected:
     BaseNode(const std::string& name = "");
     virtual ~BaseNode() {}
@@ -91,6 +96,8 @@ class BaseNode {
 
     chrono::ChTimer<double> m_timer;  ///< timer for integration cost
     double m_cum_sim_time;            ///< cumulative integration cost
+
+    bool m_verbose;
 
     static const double m_gacc;
 };

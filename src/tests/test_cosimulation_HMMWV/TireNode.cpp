@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <set>
 #include <vector>
-#include "mpi.h"
 
 #include "chrono/ChConfig.h"
 #include "chrono/physics/ChLinkLock.h"
@@ -184,9 +183,11 @@ void TireNode::Initialize() {
     MPI_Status status;
     MPI_Recv(init_state, 7, MPI_DOUBLE, VEHICLE_NODE_RANK, m_wheel_id.id(), MPI_COMM_WORLD, &status);
 
-    cout << m_prefix << " Init. loc. = " << init_state[0] << " " << init_state[1] << " " << init_state[2] << endl;
-    cout << m_prefix << " Init. rot. = " << init_state[3] << " " << init_state[4] << " " << init_state[5] << " "
-         << init_state[6] << endl;
+    if (m_verbose) {
+        cout << m_prefix << " Init. loc. = " << init_state[0] << " " << init_state[1] << " " << init_state[2] << endl;
+        cout << m_prefix << " Init. rot. = " << init_state[3] << " " << init_state[4] << " " << init_state[5] << " "
+             << init_state[6] << endl;
+    }
 
     ChVector<> loc(init_state[0], init_state[1], init_state[2]);
     ChQuaternion<> rot(init_state[3], init_state[4], init_state[5], init_state[6]);
@@ -234,10 +235,12 @@ void TireNode::Initialize() {
     // -------------------------------------------------
 
     MPI_Send(surf_props.data(), 2, MPI_UNSIGNED, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
-    cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
+    if (m_verbose)
+        cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
 
     MPI_Send(mat_props.data(), 8, MPI_FLOAT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
-    cout << m_prefix << " friction = " << mat_props[0] << endl;
+    if (m_verbose)
+        cout << m_prefix << " friction = " << mat_props[0] << endl;
 
     // ----------------------------------
     // Write file with tire node settings
@@ -481,7 +484,8 @@ void TireNode::Synchronize(int step_number, double time) {
     MPI_Recv(index_data, count, MPI_INT, TERRAIN_NODE_RANK, step_number, MPI_COMM_WORLD, &status);
     MPI_Recv(force_data, 3 * count, MPI_DOUBLE, TERRAIN_NODE_RANK, step_number, MPI_COMM_WORLD, &status);
 
-    cout << m_prefix << " step number: " << step_number << "  vertices in contact: " << count << endl;
+    if (m_verbose)
+        cout << m_prefix << " step number: " << step_number << "  vertices in contact: " << count << endl;
 
     // Repack data and apply forces to the mesh vertices
     m_vert_indices.resize(count);
@@ -629,7 +633,8 @@ void TireNode::OutputData(int frame) {
     sprintf(filename, "%s/data_%04d.dat", m_node_out_dir.c_str(), frame + 1);
     csv.write_to_file(filename);
 
-    cout << m_prefix << " write output file ==> " << filename << endl;
+    if (m_verbose)
+        cout << m_prefix << " write output file ==> " << filename << endl;
 }
 
 // -----------------------------------------------------------------------------

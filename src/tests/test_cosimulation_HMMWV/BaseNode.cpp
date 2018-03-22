@@ -24,7 +24,8 @@
 
 const double BaseNode::m_gacc = -9.81;
 
-BaseNode::BaseNode(const std::string& name) : m_name(name), m_step_size(1e-4), m_prefix("[]"), m_cum_sim_time(0) {}
+BaseNode::BaseNode(const std::string& name)
+    : m_name(name), m_step_size(1e-4), m_prefix("[]"), m_cum_sim_time(0), m_verbose(true) {}
 
 void BaseNode::SetOutDir(const std::string& dir_name, const std::string& suffix) {
     m_out_dir = dir_name;
