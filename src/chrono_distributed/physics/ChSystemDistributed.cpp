@@ -44,7 +44,13 @@
 using namespace chrono;
 using namespace collision;
 
-/// Helper function for visualizing the shapes free list.
+// Structure of force data used internally for MPI sending contact forces.
+struct internal_force {
+    uint gid;
+    double force[3];
+};
+
+// Helper function for visualizing the shapes free list.
 static void PrintNode(LocalShapeNode* node) {
     std::cout << "| index = " << node->body_shapes_index << " size = " << node->size << " free = " << node->free
               << "| ---> ";
@@ -561,8 +567,7 @@ void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, const TriDat
 }
 
 // TODO: only return for bodies with nonzero contact force
-std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(const std::vector<uint>& gids) {
-    bool found_contact = false;
+std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(const std::vector<uint>& gids) const {
     // Gather forces on specified bodies
     std::vector<internal_force> send;
     for (uint i = 0; i < gids.size(); i++) {
@@ -587,12 +592,11 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
     internal_force* buf = new internal_force[gids.size()];
     int num_gids = 0;
     if (my_rank == master_rank) {
-        // Write rank 0 values
+        // Write own values
         if (send.size() > 0) {
             std::memcpy(buf, send.data(), sizeof(internal_force) * send.size());
             buf += send.size();
             num_gids += send.size();
-            found_contact = true;
         }
         MPI_Ibarrier(world, &r_bar);
         MPI_Status s_prob;
@@ -609,17 +613,15 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
                 MPI_Irecv(buf, count, InternalForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
                 buf += count;
                 num_gids += count;
-                found_contact = true;
             }
             MPI_Test(&r_bar, &r_bar_flag, &s_bar);
         }
-    }
-    // All other ranks send their elements, if they have any
-    else {
+    } else {
+        // All other ranks send their elements, if they have any
         if (send.size() > 0) {
             MPI_Request r_send;
             // Non-blocking synchronous Send
-            MPI_Issend(send.data(), send.size(), InternalForceType, 0, 0, world, &r_send);
+            MPI_Issend(send.data(), send.size(), InternalForceType, master_rank, 0, world, &r_send);
 
             MPI_Status s_send;
             MPI_Wait(&r_send, &s_send);
@@ -630,50 +632,40 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
 
     MPI_Status stat;
     MPI_Wait(&r_bar, &stat);  // Wait for completion of all sending
-    std::vector<std::pair<uint, ChVector<double>>> forces;
 
-    // At this point, buf holds all forces on master_rank
-
-    // If no forces were found, return a vector with only GID == UINT_MAX
-    if (!found_contact) {
-        forces.push_back(std::pair<uint, ChVector<>>(UINT_MAX, ChVector<>(0)));
-        return forces;
-    }
-
+    // At this point, buf holds all forces on master_rank. All other ranks have num_gids=0.
+    std::vector<std::pair<uint, ChVector<>>> forces;
     for (int i = 0; i < num_gids; i++) {
-        forces.push_back(std::pair<uint, ChVector<double>>(
-            buf[i].gid, ChVector<>(buf[i].force[0], buf[i].force[1], buf[i].force[2])));
+        ChVector<> frc(buf[i].force[0], buf[i].force[1], buf[i].force[2]);
+        forces.push_back(std::make_pair(buf[i].gid, frc));
     }
 
     delete[] buf;
     return forces;
 }
 
-std::pair<uint, ChVector<>> ChSystemDistributed::GetBodyContactForce(uint gid) {
-    // Gather forces on specified bodies
-    internal_force send;
+// NOTE: This function implies that real is double
+real3 ChSystemDistributed::GetBodyContactForce(uint gid) const {
+    real3 force(0);
+
+    // Check if specified body is owned by this rank and get force
     int local = ddm->GetLocalIndex(gid);
     bool found = local != -1 &&
                  (ddm->comm_status[local] == distributed::OWNED || ddm->comm_status[local] == distributed::SHARED_UP ||
                   ddm->comm_status[local] == distributed::SHARED_DOWN);
-    bool found_contact = false;
     if (found) {
         // Get force on body at index local
         int contact_index = data_manager->host_data.ct_body_map[local];
         if (contact_index != -1) {
-            real3 f = data_manager->host_data.ct_body_force[contact_index];
-            send = {gid, {f[0], f[1], f[2]}};
-            found_contact = true;
+            force = data_manager->host_data.ct_body_force[contact_index];
         }
     }
 
-    // Master rank receives all messages sent to it and appends the values to its gid vector
+    // Master rank receives from owning rank
     MPI_Request r_bar;
     MPI_Status s_bar;
-    internal_force* buf = new internal_force;
     int num_gids = 0;
     if (my_rank == master_rank) {
-        // Write rank 0 values // if 0 had a value, send is already full and done
         MPI_Ibarrier(world, &r_bar);
         MPI_Status s_prob;
         int message_waiting = 0;
@@ -685,18 +677,16 @@ std::pair<uint, ChVector<>> ChSystemDistributed::GetBodyContactForce(uint gid) {
             MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, world, &message_waiting, &s_prob);
             if (message_waiting) {
                 MPI_Request r_recv;
-                MPI_Irecv(&send, 1, InternalForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
-                found_contact = true;
+                MPI_Irecv(&force, 3, MPI_DOUBLE, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
             }
             MPI_Test(&r_bar, &r_bar_flag, &s_bar);
         }
-    }
-    // All other ranks send their elements, if they have any
-    else {
+    } else {
+        // All other ranks send their elements, if they have any
         if (found) {
             MPI_Request r_send;
             // Non-blocking synchronous Send
-            MPI_Issend(&send, 1, InternalForceType, 0, 0, world, &r_send);
+            MPI_Issend(&force, 3, MPI_DOUBLE, master_rank, 0, world, &r_send);
 
             MPI_Status s_send;
             MPI_Wait(&r_send, &s_send);
@@ -706,14 +696,7 @@ std::pair<uint, ChVector<>> ChSystemDistributed::GetBodyContactForce(uint gid) {
     }
 
     MPI_Status stat;
-    MPI_Wait(&r_bar, &stat);
+    MPI_Wait(&r_bar, &stat);  // Wait for completion of all sending
 
-    if (!found_contact) {
-        return std::pair<uint, ChVector<>>(UINT_MAX, ChVector<>(0));
-    }
-
-    std::pair<uint, ChVector<>> force;
-    force.first = send.gid;
-    force.second = ChVector<>(send.force[0], send.force[1], send.force[2]);
     return force;
 }

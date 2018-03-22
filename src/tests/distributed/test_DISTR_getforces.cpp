@@ -344,10 +344,7 @@ int main(int argc, char* argv[]) {
         my_sys.DoStepDynamics(time_step);
         time += time_step;
         auto force = my_sys.GetBodyContactForce(target_body);
-        if (force.first != UINT_MAX) {
-            std::cout << "GID " << force.first << " (" << force.second.x() << " , " << force.second.y() << " , "
-                      << force.second.z() << ")" << std::endl;
-        }
+        std::cout << "GID " << target_body << " (" << force.x << ", " << force.y << ", " << force.z << ")" << std::endl;
         if (i % out_steps == 0) {
             if (my_rank == MASTER)
                 std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;

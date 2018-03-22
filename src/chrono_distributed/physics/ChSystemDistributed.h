@@ -72,7 +72,7 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     double GetGhostLayer() const { return ghost_layer; }
 
     /// Return the current global number of bodies in the system.
-    int GetNumBodiesGlobal() const { return num_bodies_global; }
+    unsigned int GetNumBodiesGlobal() const { return num_bodies_global; }
 
     /// Return true if pos is within this rank's sub-domain.
     bool InSub(const ChVector<double>& pos) const;
@@ -94,12 +94,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// This body should not have associated collision geometry.
     /// NOTE: A body crossing multiple sub-domains will not be correctly advanced.
     void AddBodyAllRanks(std::shared_ptr<ChBody> body);
-
-    /// Add the specified body on each rank on which the function is called.
-    /// This function is provided as a more efficient mechanism for initializing large numbers
-    /// of bodies in a distributed system (as the ChBody objects need not be created on all ranks, 
-    /// but rather only on those ranks covering the subdomain in which the body is initially
-    /// located).  See InSub() to decide if a 3D location is within a rank's subdomain.
 
     /// Remove a body from the simulation based on the ID of the body (not based on
     /// object comparison between ChBodys). Should be called on all ranks to ensure
@@ -163,9 +157,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
 
     /// Stores all data needed to fully update the state of a body
     typedef struct BodyState {
-        BodyState(ChVector<>& p, ChQuaternion<>& r, ChVector<>& p_dt, ChQuaternion<>& r_dt)
-            : pos(p), rot(r), pos_dt(p_dt), rot_dt(r_dt){};
-
         ChVector<> pos;
         ChQuaternion<> rot;
         ChVector<> pos_dt;
@@ -207,19 +198,14 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
                            const std::vector<TriData>& new_shapes);
     void SetTriangleShape(uint gid, int shape_idx, const TriData& new_shape);
 
-    /// Structure of force data used internally for MPI sending contact forces.
-    typedef struct internal_force {
-        uint gid;
-        double force[3];
-    } internal_force;
+    /// Get contact forces experienced by any of the bodies specified through their global IDs.
+    /// Must be called on all system ranks; return value valid only on 'master' rank.
+    /// Returns a vector of pairs of global IDs and corresponding contact forces.
+    std::vector<std::pair<uint, ChVector<>>> GetBodyContactForces(const std::vector<uint>& gids) const;
 
-    /// Returns a vector of pairs of gid and corresponding contact forces.
-    /// Must be called on all system ranks and inputs must be complete and valid
-    /// on each rank.
-    /// Returns a pair with gid == UINT_MAX if there are the gid if no contact
-    /// force is found.
-    std::vector<std::pair<uint, ChVector<>>> GetBodyContactForces(const std::vector<uint>& gids);
-    std::pair<uint, ChVector<>> GetBodyContactForce(uint gid);
+    /// Get the contact force experienced by the body with given global ID.
+    /// Must be called on all system ranks; return value valid only on 'master' rank.
+    virtual real3 GetBodyContactForce(uint gid) const override;
 
   protected:
     /// Number of MPI ranks

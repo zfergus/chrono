@@ -304,7 +304,11 @@ int main(int argc, char* argv[]) {
             my_sys.PrintBodyStatus();
         }
         if (i == state_step) {
-            chrono::ChSystemDistributed::BodyState state(pos, rot, pos_dt, rot_dt);
+            chrono::ChSystemDistributed::BodyState state;
+            state.pos = pos;
+            state.rot = rot;
+            state.pos_dt = pos_dt;
+            state.rot_dt = rot_dt;
             my_sys.SetBodyState(target_body, state);
             std::cout << "AFTER" << std::endl;
             my_sys.PrintBodyStatus();  // Print everything about all bodies
