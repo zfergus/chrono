@@ -77,14 +77,7 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemParallel* sys) {
 
 size_t AddFallingBalls(ChSystemParallel* sys) {
     ChVector<double> box_center((settling_gap + dx / 2) / 2, 0, 3 * height / 4);
-
-    ChVector<double> h_dims((settling_gap + dx / 2) / 2, hy, height / 4);
-    ChVector<double> padding = 3 * gran_radius * ChVector<double>(1, 1, 1);
-    ChVector<double> half_dims = h_dims - padding;
-
-    // utils::GridSampler<> sampler(spacing);
-    utils::HCPSampler<> sampler(spacing);
-    auto points = sampler.SampleBox(box_center, half_dims);
+    ChVector<double> h_dims = ChVector<>((settling_gap + dx / 2) / 2, hy, height / 4) - 3 * gran_radius;
 
     auto ballMat = std::make_shared<ChMaterialSurfaceSMC>();
     ballMat->SetYoungModulus(Y);
@@ -92,27 +85,41 @@ size_t AddFallingBalls(ChSystemParallel* sys) {
     ballMat->SetRestitution(cr);
     ballMat->SetAdhesion(0);
 
-    // Create the falling balls
-    int ballId = 0;
-    for (int i = 0; i < points.size(); i++) {
-        auto ball = std::make_shared<ChBody>(std::make_shared<ChCollisionModelParallel>(), ChMaterialSurface::SMC);
-        ball->SetMaterialSurface(ballMat);
-        ball->SetIdentifier(ballId++);
-        ball->SetMass(mass);
-        ball->SetInertiaXX(inertia);
-        ball->SetPos(points[i]);
-        ball->SetRot(ChQuaternion<>(1, 0, 0, 0));
-        ball->SetBodyFixed(false);
-        ball->SetCollide(true);
+    utils::Generator gen(sys);
+    std::shared_ptr<utils::MixtureIngredient> m1 = gen.AddMixtureIngredient(utils::SPHERE, 1.0);
+    m1->setDefaultMaterial(ballMat);
+    m1->setDefaultDensity(rho);
+    m1->setDefaultSize(gran_radius);
 
-        ball->GetCollisionModel()->ClearModel();
-        utils::AddSphereGeometry(ball.get(), gran_radius);
-        ball->GetCollisionModel()->BuildModel();
+    class MyFilter : public utils::Generator::CreateObjectsCallback {
+      public:
+        MyFilter(ChSystemParallel* system, const ChVector<>& center) : m_system(system), m_center(center) {}
 
-        sys->AddBody(ball);
-    }
+        unsigned int GetNumPoints() const { return m_num_points; }
 
-    return points.size();
+        virtual void OnCreateObjects(const utils::PointVectorD& points, std::vector<bool>& flags) override {
+            m_num_points = points.size();
+            for (auto i = 0; i < points.size(); i++) {
+                if (points[i].x() > m_center.x() && points[i].y() > m_center.y()) {
+                    flags[i] = false;
+                    m_num_points--;
+                }
+            }
+        }
+
+      private:
+        ChSystemParallel* m_system;
+        ChVector<> m_center;
+        size_t m_num_points;
+    };
+
+    auto filter = std::make_shared<MyFilter>(sys, box_center);
+    gen.RegisterCreateObjectsCallback(filter);
+
+    gen.setBodyIdentifier(0);
+    gen.createObjectsBox(utils::HCP_PACK, spacing, box_center, h_dims);
+
+    return gen.getTotalNumBodies();
 }
 
 int main(int argc, char* argv[]) {
