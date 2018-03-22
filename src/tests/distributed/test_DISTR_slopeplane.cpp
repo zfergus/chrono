@@ -43,10 +43,10 @@ enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
-                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_TIME, "-t", SO_REQ_CMB},
-                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},    {OPT_RENDER, "-r", SO_NONE}, SO_END_OF_OPTIONS };
+CSimpleOptA::SOption g_options[] = {
+    {OPT_HELP, "--help", SO_NONE}, {OPT_HELP, "-h", SO_NONE},    {OPT_THREADS, "-n", SO_REQ_CMB},
+    {OPT_TIME, "-t", SO_REQ_CMB},  {OPT_MONITOR, "-m", SO_NONE}, {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
+    {OPT_VERBOSE, "-v", SO_NONE},  {OPT_RENDER, "-r", SO_NONE},  SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -145,7 +145,8 @@ void AddSlopedWall(ChSystemDistributed* sys) {
     sys->AddBodyAllRanks(container);
 
     auto boundary = new ChBoundary(container);
-    boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)), ChVector2<>(100 * gran_radius, 100 * gran_radius));
+    boundary->AddPlane(ChFrame<>(ChVector<>(dx / 2.0, 0, height / 2.0), Q_from_AngY(0)),
+                       ChVector2<>(100 * gran_radius, 100 * gran_radius));
     boundary->AddVisualization(3 * gran_radius);
 }
 
@@ -193,11 +194,8 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     // Create the falling balls
     int ballId = 0;
     for (int i = 0; i < points.size(); i++) {
-        if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBodyTrust(ball);
-        }
-        sys->IncrementNumBodiesGlobal();
+        auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
+        sys->AddBody(ball);
     }
 
     return points.size();
@@ -343,7 +341,8 @@ int main(int argc, char* argv[]) {
     if (render && my_rank == MASTER) {
         opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
         gl_window.Initialize(1280, 720, "Slope plane test", &my_sys);
-        gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, height), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.01f);
+        gl_window.SetCamera(ChVector<>(-20 * gran_radius, -100 * gran_radius, height), ChVector<>(0, 0, 0),
+                            ChVector<>(0, 0, 1), 0.01f);
         gl_window.SetRenderMode(opengl::WIREFRAME);
     }
 #endif

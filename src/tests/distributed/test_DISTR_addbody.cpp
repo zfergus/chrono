@@ -58,34 +58,6 @@ size_t AddBalls(ChSystem* sys) {
     return points.size();
 }
 
-size_t AddBallsTrust(ChSystemDistributed* sys) {
-    ChVector<double> box_center(0, 0, 0);
-    ChVector<double> half_dims(hx, hy, hz);
-
-    utils::GridSampler<> sampler(spacing);
-    auto points = sampler.SampleBox(box_center, half_dims);
-
-    auto mat = std::make_shared<ChMaterialSurfaceSMC>();
-    mat->SetYoungModulus(2e6f);
-    mat->SetFriction(0.5f);
-    mat->SetRestitution(0.01f);
-    mat->SetAdhesion(0);
-
-    // Create the falling balls
-    int ballId = 0;
-
-    for (int i = 0; i < points.size(); i++) {
-        if (sys->InSub(points[i])) {
-            auto ball = std::shared_ptr<ChBody>(sys->NewBody());
-            SetBallParams(ball, points[i], mat);
-            sys->AddBodyTrust(ball);
-        }
-        sys->IncrementNumBodiesGlobal();
-    }
-
-    return points.size();
-}
-
 int main(int argc, char* argv[]) {
     int num_ranks;
     int my_rank;
@@ -111,10 +83,9 @@ int main(int argc, char* argv[]) {
     ////}
 
     // Read program argument (method for adding bodies to the system)
-    int method = std::stoi(argv[1]);
 
     // Create distributed system
-    ChSystemDistributed my_sys(MPI_COMM_WORLD, radius * 2, 10000);
+    ChSystemDistributed my_sys(MPI_COMM_WORLD, radius * 2, 1000000);
 
     // Domain decomposition
     ChVector<double> domlo(-hx - spacing, -hy - spacing, -hz - spacing);
@@ -125,15 +96,10 @@ int main(int argc, char* argv[]) {
     // Create objects
     size_t num_balls;
     double t_start = MPI_Wtime();
-    if (method == 0)
-        num_balls = AddBalls(&my_sys);
-    else
-        num_balls = AddBallsTrust(&my_sys);
     MPI_Barrier(my_sys.GetCommunicator());
     double elapsed = MPI_Wtime() - t_start;
 
     if (my_rank == 0) {
-        std::cout << "Method: " << (method == 0 ? "AddBody" : "AddBodyTrust") << std::endl;
         std::cout << "Number balls: " << num_balls << std::endl;
         std::cout << "Number bodies (global): " << my_sys.GetNumBodiesGlobal() << std::endl;
         std::cout << "Total elapsed time: " << elapsed << std::endl;
@@ -142,4 +108,3 @@ int main(int argc, char* argv[]) {
     MPI_Finalize();
     return 0;
 }
-

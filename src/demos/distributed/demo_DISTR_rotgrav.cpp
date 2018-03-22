@@ -194,11 +194,8 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     int ballId = 0;
 
     for (int i = 0; i < points.size(); i++) {
-        if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBodyTrust(ball);
-        }
-        sys->IncrementNumBodiesGlobal();
+        auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
+        sys->AddBody(ball);
     }
 
     return points.size();

@@ -62,7 +62,7 @@ bool GetProblemSpecs(int argc,
 void ShowUsage();
 
 // Granular Properties
-float Y = 2e6f; // TODO 2e6f
+float Y = 2e6f;  // TODO 2e6f
 float mu = 0.4f;
 float cr = 0.05f;
 double gran_radius = 0.00125;  // 1.25mm radius
@@ -84,7 +84,7 @@ size_t low_x_wall;
 size_t high_x_wall;
 
 // Simulation
-double time_step = 1e-5; // TODO 1e-5
+double time_step = 1e-5;  // TODO 1e-5
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
@@ -205,11 +205,8 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     // Create the falling balls
     int ballId = 0;
     for (int i = 0; i < points.size(); i++) {
-        if (sys->InSub(points[i])) {
-            auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
-            sys->AddBodyTrust(ball);
-        }
-        sys->IncrementNumBodiesGlobal();
+        auto ball = CreateBall(points[i], ballMat, &ballId, mass, inertia, gran_radius);
+        sys->AddBody(ball);
     }
 
     return points.size();

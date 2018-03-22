@@ -34,17 +34,17 @@ using namespace chrono;
 using namespace chrono::collision;
 
 // ID values to identify command line arguments
-enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE };
+enum { OPT_HELP, OPT_THREADS, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE, OPT_MIX };
 
 // Table of CSimpleOpt::Soption structures. Each entry specifies:
 // - the ID for the option (returned from OptionId() during processing)
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
-                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_TIME, "-t", SO_REQ_CMB},
-                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
+CSimpleOptA::SOption g_options[] = {
+    {OPT_HELP, "--help", SO_NONE}, {OPT_HELP, "-h", SO_NONE},     {OPT_THREADS, "-n", SO_REQ_CMB},
+    {OPT_TIME, "-t", SO_REQ_CMB},  {OPT_MONITOR, "-m", SO_NONE},  {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
+    {OPT_VERBOSE, "-v", SO_NONE},  {OPT_MIX, "-mix", SO_REQ_CMB}, SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -101,7 +101,7 @@ double settling_gap = 0 * rad_max;           // Width of opening of the hopper d
 double pouring_gap = 6 * rad_max;            // Width of opening of the hopper during pouring phase
 double settling_time = 1;
 #ifndef PAR
-int split_axis = 2;  // Split domain along z axis
+int split_axis = 2;  // Split domain along z axis // TODO
 #endif
 
 size_t high_x_wall;
@@ -142,6 +142,17 @@ int GetGeometry(int id, ChBody* body, double r) {
                 AddBiSphere(body, r);
             break;
 
+        case ASYM_H:
+            AddAsymmetricBisphere(body, r);
+            break;
+
+        case SPHERE_ASYM_H:
+            if (id % 2 == 0)
+                utils::AddSphereGeometry(body, r);
+            else
+                AddAsymmetricBisphere(body, r);
+            break;
+
         case SPHERE_BISPHERE_ASYM_H:
             if (id % 3 == 0)
                 utils::AddSphereGeometry(body, r);
@@ -152,7 +163,7 @@ int GetGeometry(int id, ChBody* body, double r) {
             break;
 
         default:
-            std::cout << "Select a mix type" << std::endl;
+            std::cout << "Select a mix type." << std::endl;
             my_abort();
             break;
     }
@@ -275,11 +286,8 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     for (int i = 0; i < points.size(); i++) {
         if (points[i].z() > (height * points[i].x()) / dx + 2 * dz) {
             double r = GetRadius();
-            if (sys->InSub(points[i])) {
-                auto ball = CreateBall(points[i], ballMat, ballId, r);
-                sys->AddBodyTrust(ball);
-            }
-            sys->IncrementNumBodiesGlobal();
+            auto ball = CreateBall(points[i], ballMat, ballId, r);
+            sys->AddBody(ball);
             count++;
         }
     }
@@ -312,6 +320,9 @@ int main(int argc, char* argv[]) {
     // 	std::cin >> foo;
     // }
     // MPI_Barrier(MPI_COMM_WORLD);
+    if (my_rank == MASTER) {
+        std::cout << "MIX TYPE: " << mix << std::endl;
+    }
 
     // Output directory and files
     std::ofstream outfile;
@@ -349,7 +360,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Create distributed system
-    ChSystemDistributed my_sys(MPI_COMM_WORLD, rad_max * 2, 10000);  // TODO
+    ChSystemDistributed my_sys(MPI_COMM_WORLD, rad_max * 2, 100000);  // TODO
 
     if (verbose) {
         if (my_rank == MASTER)
@@ -544,6 +555,9 @@ bool GetProblemSpecs(int argc,
             case OPT_VERBOSE:
                 verbose = true;
                 break;
+
+            case OPT_MIX:
+                mix = std::stoi(args.OptionArg());
         }
     }
 

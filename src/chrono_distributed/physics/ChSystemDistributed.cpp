@@ -188,16 +188,14 @@ void ChSystemDistributed::AddBodyAllRanks(std::shared_ptr<ChBody> newbody) {
 }
 
 void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
-    // Add body on the rank whose sub-domain contains the current body position.
-    if (InSub(newbody->GetPos())) {
-        AddBodyTrust(newbody);
-    }
-
     // Increment global body ID counter.
     num_bodies_global++;
-}
 
-void ChSystemDistributed::AddBodyTrust(std::shared_ptr<ChBody> newbody) {
+    // Add body on the rank whose sub-domain contains the current body position.
+    if (!InSub(newbody->GetPos())) {
+        return;
+    }
+
     newbody->SetGid(num_bodies_global);
     distributed::COMM_STATUS status = domain->GetBodyRegion(newbody);
 

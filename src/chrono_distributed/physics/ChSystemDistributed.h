@@ -74,11 +74,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Return the current global number of bodies in the system.
     int GetNumBodiesGlobal() const { return num_bodies_global; }
 
-    /// Increment the global number of bodies. 
-    /// This function should be called *on all ranks* after a call to AddBodyTrust.
-    /// Do not call this function after AddBody or AddBodyAllRanks, as these increment the counter themselves.
-    void IncrementNumBodiesGlobal() { num_bodies_global++; }
-
     /// Return true if pos is within this rank's sub-domain.
     bool InSub(const ChVector<double>& pos) const;
 
@@ -105,9 +100,6 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// of bodies in a distributed system (as the ChBody objects need not be created on all ranks, 
     /// but rather only on those ranks covering the subdomain in which the body is initially
     /// located).  See InSub() to decide if a 3D location is within a rank's subdomain.
-    /// NOTE: after calling this function on a rank, it is the user's responsibility to increment
-    /// the global number of bodies *on all ranks*, through a call to IncrementNumBodiesGlobal.
-    void AddBodyTrust(std::shared_ptr<ChBody> newbody);
 
     /// Remove a body from the simulation based on the ID of the body (not based on
     /// object comparison between ChBodys). Should be called on all ranks to ensure
