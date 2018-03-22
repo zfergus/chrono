@@ -126,6 +126,7 @@ bool ChSystemDistributed::InSub(const ChVector<double>& pos) const {
 
 bool ChSystemDistributed::Integrate_Y() {
     assert(domain->IsSplit());
+    ddm->initial_add = false;
 
     bool ret = ChSystemParallelSMC::Integrate_Y();
     if (num_ranks != 1) {

@@ -152,20 +152,22 @@ void ChCollisionSystemDistributed::Add(ChCollisionModel* model) {
 
     // Check for free spaces to insert into (DO need same shape type else can't deactivate that)
     std::vector<int> free_dm_shapes;
-    for (int i = 0; i < needed_count; i++) {
-        // i identifies a shape in the MODEL
+    if (!ddm->initial_add) {
+        for (int i = 0; i < needed_count; i++) {
+            // i identifies a shape in the MODEL
 
-        // Search data_manager->shape_data for a free and shape-matching spot
-        for (int j = 0; j < dm->shape_data.id_rigid.size(); j++) {
-            // If the index in the data manager is open and corresponds to the same shape type
-            if (dm->shape_data.id_rigid[j] == UINT_MAX && dm->shape_data.typ_rigid[j] == pmodel->mData[i].type) {
-                free_dm_shapes.push_back(j);
-                break;  // Found spot for this shape, break inner loop to get new i (shape)
-            }
-            // TODO: Early break from both loops if a spot cannot be found for a shape
-        }  // End for loop over the slots in data_manager->shape_data
-    }      // End for loop over the shapes for this model
-
+            // TODO THIS IS THE EXPENSIVE PART
+            // Search data_manager->shape_data for a free and shape-matching spot
+            for (int j = 0; j < dm->shape_data.id_rigid.size(); j++) {
+                // If the index in the data manager is open and corresponds to the same shape type
+                if (dm->shape_data.id_rigid[j] == UINT_MAX && dm->shape_data.typ_rigid[j] == pmodel->mData[i].type) {
+                    free_dm_shapes.push_back(j);
+                    break;  // Found spot for this shape, break inner loop to get new i (shape)
+                }
+                // TODO: Early break from both loops if a spot cannot be found for a shape
+            }  // End for loop over the slots in data_manager->shape_data
+        }      // End for loop over the shapes for this model
+    }
     // If there is space for ALL shapes in the model in the data_manager
     // unload them.
     if (free_dm_shapes.size() == needed_count) {

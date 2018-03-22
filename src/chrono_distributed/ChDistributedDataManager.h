@@ -51,6 +51,9 @@ class CH_DISTR_API ChDistributedDataManager {
     ChDistributedDataManager(ChSystemDistributed* my_sys);
     virtual ~ChDistributedDataManager();
 
+    bool initial_add;  ///< Indicates that the system is undergoing its inital setup. Allows for some shortcuts
+                       ///< by assuming contiguous valid data.
+
     /* Basic distributed values */
     std::vector<unsigned int> global_id;                ///< Global id of each body. Maps local index to global index.
     std::vector<distributed::COMM_STATUS> comm_status;  ///< Communication status of each body.
