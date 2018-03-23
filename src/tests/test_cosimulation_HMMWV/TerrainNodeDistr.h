@@ -130,25 +130,14 @@ class TerrainNodeDistr : public BaseNode {
     void WriteCheckpoint();
 
   private:
-    /// Association between a proxy body and a mesh index.
-    /// The body can be associated with either a mesh vertex or a mesh triangle.
-    struct ProxyBody {
-        ProxyBody(std::shared_ptr<chrono::ChBody> body, int index) : m_body(body), m_index(index) {}
-        std::shared_ptr<chrono::ChBody> m_body;
-        int m_index;
-    };
-
     ///
     struct TireData {
-        std::shared_ptr<chrono::ChMaterialSurface> m_material_tire;  ///< material properties for proxy bodies
-        std::vector<ProxyBody> m_proxies;                ///< list of proxy bodies with associated mesh index
         std::vector<uint> m_gids;                        ///< global indices of proxy bodies
         std::vector<chrono::ChVector<>> m_vertex_pos;    ///< mesh vertex positions
         std::vector<chrono::ChVector<>> m_vertex_vel;    ///< mesh vertex velocities
         std::vector<chrono::ChVector<int>> m_triangles;  ///< tire mesh connectivity
         unsigned int m_num_vert;                         ///< number of tire mesh vertices
         unsigned int m_num_tri;                          ///< number of tire mesh triangles
-        unsigned int m_start_vert;                       ///< start vertex index for proxy body identifiers
         unsigned int m_start_tri;                        ///< start triangle index for proxy body identifiers
     };
 
@@ -195,7 +184,7 @@ class TerrainNodeDistr : public BaseNode {
 
     void Construct();
 
-    void CreateFaceProxies(int which);
+    void CreateFaceProxies(int which, std::shared_ptr<chrono::ChMaterialSurfaceSMC> material);
 
     void UpdateFaceProxies(int which);
 

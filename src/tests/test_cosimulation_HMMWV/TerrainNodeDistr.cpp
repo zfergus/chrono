@@ -565,7 +565,6 @@ void TerrainNodeDistr::Initialize() {
 #endif
 
     // Loop over all tires, receive information, create proxies.
-    unsigned int start_vert_index = 0;
     unsigned int start_tri_index = 0;
 
     for (int which = 0; which < m_num_tires; which++) {
@@ -589,9 +588,7 @@ void TerrainNodeDistr::Initialize() {
         m_tire_data[which].m_triangles.resize(surf_props[1]);
         m_tire_data[which].m_gids.resize(surf_props[1]);
 
-        m_tire_data[which].m_start_vert = start_vert_index;
         m_tire_data[which].m_start_tri = start_tri_index;
-        start_vert_index += surf_props[0];
         start_tri_index += surf_props[1];
 
         // Receive tire contact material properties.
@@ -618,10 +615,8 @@ void TerrainNodeDistr::Initialize() {
         mat_tire->SetKt(mat_props[6]);
         mat_tire->SetGt(mat_props[7]);
 
-        m_tire_data[which].m_material_tire = mat_tire;
-
         // Create proxy bodies. Represent the tire as triangles associated with mesh faces.
-        CreateFaceProxies(which);
+        CreateFaceProxies(which, mat_tire);
     }
 }
 
@@ -630,7 +625,7 @@ void TerrainNodeDistr::Initialize() {
 // Maintain a list of all bodies associated with the tire.
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
-void TerrainNodeDistr::CreateFaceProxies(int which) {
+void TerrainNodeDistr::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSurfaceSMC> material) {
     //// TODO:  better approximation of mass / inertia?
     ChVector<> inertia_pF = 1e-3 * m_mass_pF * ChVector<>(0.1, 0.1, 0.1);
 
@@ -640,7 +635,7 @@ void TerrainNodeDistr::CreateFaceProxies(int which) {
         body->SetMass(m_mass_pF);
         body->SetInertiaXX(inertia_pF);
         body->SetBodyFixed(m_fixed_proxies);
-        body->SetMaterialSurface(m_tire_data[which].m_material_tire);
+        body->SetMaterialSurface(material);
 
         // Create contact shape.
         // Note that the vertex locations will be updated at every synchronization time.
@@ -656,8 +651,6 @@ void TerrainNodeDistr::CreateFaceProxies(int which) {
         // For Chrono::Parallel this must be done after setting family collisions
         // (in case collision is being disabled)
         body->SetCollide(true);
-
-        m_tire_data[which].m_proxies.push_back(ProxyBody(body, it));
 
         m_system->AddBody(body);
     }
@@ -766,8 +759,6 @@ void TerrainNodeDistr::UpdateFaceProxies(int which) {
     std::vector<int> shape_idx(tire_data.m_num_tri, 0);
 
     for (unsigned int it = 0; it < tire_data.m_num_tri; it++) {
-        auto body = tire_data.m_proxies[it].m_body;
-
         const ChVector<int>& tri = tire_data.m_triangles[it];
 
         // Vertex locations and velocities (expressed in global frame)
