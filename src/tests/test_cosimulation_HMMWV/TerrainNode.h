@@ -153,7 +153,6 @@ class TerrainNode : public BaseNode {
 
     ///
     struct TireData {
-        std::shared_ptr<chrono::ChMaterialSurface> m_material_tire;  ///< material properties for proxy bodies
         std::vector<ProxyBody> m_proxies;          ///< list of proxy bodies with associated mesh index
         std::vector<VertexState> m_vertex_states;  ///< mesh vertex states
         std::vector<Triangle> m_triangles;         ///< tire mesh connectivity
@@ -213,8 +212,8 @@ class TerrainNode : public BaseNode {
 
     void Construct();
 
-    void CreateNodeProxies(int which);
-    void CreateFaceProxies(int which);
+    void CreateNodeProxies(int which, std::shared_ptr<chrono::ChMaterialSurface> material);
+    void CreateFaceProxies(int which, std::shared_ptr<chrono::ChMaterialSurface> material);
 
     void UpdateNodeProxies(int which);
     void UpdateFaceProxies(int which);

@@ -28,8 +28,8 @@
 #include "mpi.h"
 
 #include "chrono/ChConfig.h"
-#include "chrono/geometry/ChLineBezier.h"
 #include "chrono/assets/ChLineShape.h"
+#include "chrono/geometry/ChLineBezier.h"
 
 #ifdef CHRONO_OPENGL
 #include "chrono_opengl/ChOpenGLWindow.h"
@@ -507,8 +507,8 @@ void TerrainNode::Settle() {
             ChQuaternion<> rot;
             ChVector<> pos_dt;
             ChQuaternion<> rot_dt;
-            iss >> identifier >> pos.x() >> pos.y() >> pos.z() >> rot.e0() >> rot.e1() >> rot.e2() >> rot.e3() >> pos_dt.x() >>
-                pos_dt.y() >> pos_dt.z() >> rot_dt.e0() >> rot_dt.e1() >> rot_dt.e2() >> rot_dt.e3();
+            iss >> identifier >> pos.x() >> pos.y() >> pos.z() >> rot.e0() >> rot.e1() >> rot.e2() >> rot.e3() >>
+                pos_dt.x() >> pos_dt.y() >> pos_dt.z() >> rot_dt.e0() >> rot_dt.e1() >> rot_dt.e2() >> rot_dt.e3();
 
             auto body = m_system->Get_bodylist()[ib];
             assert(body->GetIdentifier() == identifier);
@@ -645,7 +645,7 @@ void TerrainNode::Initialize() {
 
         MPI_Status status_p;
         MPI_Recv(surf_props, 2, MPI_UNSIGNED, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_p);
-        
+
         m_tire_data[which].m_num_vert = surf_props[0];
         m_tire_data[which].m_num_tri = surf_props[1];
 
@@ -675,15 +675,14 @@ void TerrainNode::Initialize() {
         delete[] tri_data;
 
         // Receive tire contact material properties.
-        // Create the "tire" contact material, but defer using it until the proxy bodies are created.
         float mat_props[8];
 
         MPI_Status status_m;
         MPI_Recv(mat_props, 8, MPI_FLOAT, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_m);
 
+        std::shared_ptr<ChMaterialSurface> material;
         switch (m_method) {
             case ChMaterialSurface::SMC: {
-                // Properties for tire
                 auto mat_tire = std::make_shared<ChMaterialSurfaceSMC>();
                 mat_tire->SetFriction(mat_props[0]);
                 mat_tire->SetRestitution(mat_props[1]);
@@ -694,8 +693,7 @@ void TerrainNode::Initialize() {
                 mat_tire->SetKt(mat_props[6]);
                 mat_tire->SetGt(mat_props[7]);
 
-                m_tire_data[which].m_material_tire = mat_tire;
-
+                material = mat_tire;
                 break;
             }
             case ChMaterialSurface::NSC: {
@@ -703,8 +701,7 @@ void TerrainNode::Initialize() {
                 mat_tire->SetFriction(mat_props[0]);
                 mat_tire->SetRestitution(mat_props[1]);
 
-                m_tire_data[which].m_material_tire = mat_tire;
-
+                material = mat_tire;
                 break;
             }
         }
@@ -719,11 +716,11 @@ void TerrainNode::Initialize() {
         switch (m_type) {
             case RIGID:
                 // For contact with rigid ground, represent the tire as spheres associated with mesh vertices.
-                CreateNodeProxies(which);
+                CreateNodeProxies(which, material);
                 break;
             case GRANULAR:
                 // For contact with granular terrain, represent the tire as triangles associated with mesh faces.
-                CreateFaceProxies(which);
+                CreateFaceProxies(which, material);
                 break;
         }
     }
@@ -734,7 +731,7 @@ void TerrainNode::Initialize() {
 // Maintain a list of all bodies associated with the tire.
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
-void TerrainNode::CreateNodeProxies(int which) {
+void TerrainNode::CreateNodeProxies(int which, std::shared_ptr<ChMaterialSurface> material) {
     ChVector<> inertia_pN = 0.4 * m_mass_pN * m_radius_pN * m_radius_pN * ChVector<>(1, 1, 1);
     for (unsigned int iv = 0; iv < m_tire_data[which].m_num_vert; iv++) {
         auto body = std::shared_ptr<ChBody>(m_system->NewBody());
@@ -744,7 +741,7 @@ void TerrainNode::CreateNodeProxies(int which) {
         body->SetInertiaXX(inertia_pN);
         body->SetBodyFixed(m_fixed_proxies);
         body->SetCollide(true);
-        body->SetMaterialSurface(m_tire_data[which].m_material_tire);
+        body->SetMaterialSurface(material);
 
         body->GetCollisionModel()->ClearModel();
         utils::AddSphereGeometry(body.get(), m_radius_pN, ChVector<>(0, 0, 0), ChQuaternion<>(1, 0, 0, 0), true);
@@ -761,7 +758,7 @@ void TerrainNode::CreateNodeProxies(int which) {
 // Maintain a list of all bodies associated with the tire.
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
-void TerrainNode::CreateFaceProxies(int which) {
+void TerrainNode::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSurface> material) {
     //// TODO:  better approximation of mass / inertia?
     ChVector<> inertia_pF = 1e-3 * m_mass_pF * ChVector<>(0.1, 0.1, 0.1);
 
@@ -773,7 +770,7 @@ void TerrainNode::CreateFaceProxies(int which) {
         body->SetInertiaXX(inertia_pF);
         body->SetBodyFixed(m_fixed_proxies);
         body->SetCollide(true);
-        body->SetMaterialSurface(m_tire_data[which].m_material_tire);
+        body->SetMaterialSurface(material);
 
         // Create contact shape.
         // Note that the vertex locations will be updated at every synchronization time.
