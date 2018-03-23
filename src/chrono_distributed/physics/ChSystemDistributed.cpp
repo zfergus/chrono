@@ -202,7 +202,7 @@ void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
         return;
     }
 
-    newbody->SetGid(num_bodies_global);
+    newbody->SetGid(num_bodies_global - 1);
     distributed::COMM_STATUS status = domain->GetBodyRegion(newbody);
 
     // Check for collision with this sub-domain
@@ -567,7 +567,8 @@ void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, const TriDat
 }
 
 // TODO: only return for bodies with nonzero contact force
-std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(const std::vector<uint>& gids) const {
+std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(
+    const std::vector<uint>& gids) const {
     // Gather forces on specified bodies
     std::vector<internal_force> send;
     for (uint i = 0; i < gids.size(); i++) {
@@ -589,7 +590,8 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
     // Master rank receives all messages sent to it and appends the values to its gid vector
     MPI_Request r_bar;
     MPI_Status s_bar;
-    internal_force* buf = new internal_force[gids.size()];
+    internal_force* buffer = new internal_force[gids.size()];  // Beginning of buffer
+    internal_force* buf = buffer;                              // Moving pointer into buffer
     int num_gids = 0;
     if (my_rank == master_rank) {
         // Write own values
@@ -636,11 +638,11 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
     // At this point, buf holds all forces on master_rank. All other ranks have num_gids=0.
     std::vector<std::pair<uint, ChVector<>>> forces;
     for (int i = 0; i < num_gids; i++) {
-        ChVector<> frc(buf[i].force[0], buf[i].force[1], buf[i].force[2]);
-        forces.push_back(std::make_pair(buf[i].gid, frc));
+        ChVector<> frc(buffer[i].force[0], buffer[i].force[1], buffer[i].force[2]);
+        forces.push_back(std::make_pair(buffer[i].gid, frc));
     }
 
-    delete[] buf;
+    delete[] buffer;
     return forces;
 }
 
