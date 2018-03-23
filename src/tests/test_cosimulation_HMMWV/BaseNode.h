@@ -46,7 +46,7 @@ class BaseNode {
     /// Output files will be created in subdirectories named
     ///    dir_name/[NodeName]suffix/
     /// where [NodeName] is "VEHICLE", "TIRE", or "TERRAIN".
-    void SetOutDir(const std::string& dir_name, const std::string& suffix);
+    virtual void SetOutDir(const std::string& dir_name, const std::string& suffix);
 
     /// Get the output directory name for this node.
     const std::string& GetOutDirName() const { return m_node_out_dir; }

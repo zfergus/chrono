@@ -26,6 +26,7 @@
 
 #include "chrono/ChConfig.h"
 #include "chrono/assets/ChLineShape.h"
+#include "chrono/core/ChFileutils.h"
 #include "chrono/geometry/ChLineBezier.h"
 
 #ifdef CHRONO_OPENGL
@@ -194,6 +195,38 @@ TerrainNodeDistr::~TerrainNodeDistr() {
 
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
+void TerrainNodeDistr::SetOutDir(const std::string& dir_name, const std::string& suffix) {
+    char buf[10];
+    std::sprintf(buf, "%03d", m_system->GetCommRank());
+    std::string rank_str(buf);
+
+    m_out_dir = dir_name;
+    m_node_out_dir = dir_name + "/" + m_name + suffix;
+    m_rank_out_dir = m_node_out_dir + "/results_" + rank_str;
+
+    if (OnMaster()) {
+        if (ChFileutils::MakeDirectory(m_node_out_dir.c_str()) < 0) {
+            std::cout << "Error creating directory " << m_node_out_dir << std::endl;
+            MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
+        }
+    }
+
+    MPI_Barrier(m_system->GetCommunicator());
+
+    // Create separate results output files for each rank in intra-communicator
+    m_outf.open(m_node_out_dir + "/results_" + rank_str + ".dat", std::ios::out);
+    m_outf.precision(7);
+    m_outf << std::scientific;
+
+    // Create separate frame output directories for each rank in intra-communicator
+    if (ChFileutils::MakeDirectory(m_rank_out_dir.c_str()) < 0) {
+        std::cout << "Error creating directory " << m_rank_out_dir << std::endl;
+        MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 void TerrainNodeDistr::SetContainerDimensions(double length, double width, double height, int split_axis) {
     m_hdimX = length / 2;
     m_hdimY = width / 2;
@@ -322,6 +355,7 @@ void TerrainNodeDistr::Construct() {
     // Cache the number of bodies that have been added so far to the parallel system.
     // ATTENTION: This will be used to set the state of granular material particles if
     // initializing them from a checkpoint file.
+
     //// TODO:  global or local index?
     m_particles_start_index = m_system->data_manager->num_rigid_bodies;
 
@@ -932,7 +966,7 @@ void TerrainNodeDistr::OutputData(int frame) {
 
     // Create and write frame output file.
     char filename[100];
-    sprintf(filename, "%s/data_%04d.dat", m_node_out_dir.c_str(), frame + 1);
+    sprintf(filename, "%s/data_%04d.dat", m_rank_out_dir.c_str(), frame + 1);
 
     utils::CSV_writer csv(" ");
     WriteParticleInformation(csv);
@@ -942,15 +976,22 @@ void TerrainNodeDistr::OutputData(int frame) {
 // -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 void TerrainNodeDistr::WriteParticleInformation(utils::CSV_writer& csv) {
+    //// TODO: how do I find out the number of particles written by this rank?!?
+
     // Write current time, number of granular particles and their radius
     csv << m_system->GetChTime() << endl;
     csv << m_num_particles << m_radius_g << endl;
 
-    // Write particle positions and linear velocities
-    for (auto body : m_system->Get_bodylist()) {
+    // Write particle positions and linear velocities.
+    // Skip bodies that are not owned by this rank or are not terrain particles
+    int i = -1;
+    for (auto body : *m_system->data_manager->body_list) {
+        i++;
+        if (m_system->ddm->comm_status[i] == chrono::distributed::EMPTY)
+            continue;
         if (body->GetIdentifier() < m_Id_g)
             continue;
-        csv << body->GetIdentifier() << body->GetPos() << body->GetPos_dt() << endl;
+        csv << body->GetGid() << body->GetPos() << body->GetPos_dt() << endl;
     }
 }
 

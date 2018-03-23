@@ -254,8 +254,8 @@ int main(int argc, char** argv) {
 
             my_terrain = new TerrainNodeDistr(cosim::GetTerrainIntracommunicator(), 4, render, nthreads_terrain);
             my_terrain->SetStepSize(step_size);
+            my_terrain->SetOutDir(out_dir, suffix);
             if (rank == TERRAIN_NODE_RANK) {
-                my_terrain->SetOutDir(out_dir, suffix);
                 cout << my_terrain->GetPrefix() << " rank = " << rank << " running on: " << procname << endl;
                 cout << my_terrain->GetPrefix() << " output directory: " << my_terrain->GetOutDirName() << endl;
             }
@@ -378,17 +378,17 @@ int main(int argc, char** argv) {
                 if (rank == TERRAIN_NODE_RANK) {
                     cout << my_terrain->GetPrefix() << " sim time = " << my_terrain->GetSimTime() << "  ["
                          << my_terrain->GetTotalSimTime() << "]" << endl;
-
-                    if (output && is % output_steps == 0) {
-                        my_terrain->OutputData(output_frame);
-                        output_frame++;
-                    }
                 }
 
-                if (is % checkpoint_steps == 0) {
-                    my_terrain->WriteCheckpoint();
-                    checkpoint_frame++;
+                if (output && is % output_steps == 0) {
+                    my_terrain->OutputData(output_frame);
+                    output_frame++;
                 }
+
+                ////if (is % checkpoint_steps == 0) {
+                ////    my_terrain->WriteCheckpoint();
+                ////    checkpoint_frame++;
+                ////}
 
                 break;
             }

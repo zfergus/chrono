@@ -62,6 +62,10 @@ class TerrainNodeDistr : public BaseNode {
     );
     ~TerrainNodeDistr();
 
+    /// Set up output directories for distributed terrain.
+    /// Must be called on all ranks in the terrain intra-communicator.
+    virtual void SetOutDir(const std::string& dir_name, const std::string& suffix) override;
+
     /// Set container dimensions.
     void SetContainerDimensions(double length,  ///< length in X direction (default: 2)
                                 double width,   ///< width in Y direction (default: 0.5)
@@ -177,6 +181,8 @@ class TerrainNodeDistr : public BaseNode {
     std::shared_ptr<chrono::ChBezierCurve> m_path;  ///< path for closed-loop driver (for rendering only, may be empty)
 
     bool m_render;  ///< if true, use OpenGL rendering
+
+    std::string m_rank_out_dir;  ///< rank-specific output directory
 
     static const std::string m_checkpoint_filename;  ///< name of checkpointing file
 
