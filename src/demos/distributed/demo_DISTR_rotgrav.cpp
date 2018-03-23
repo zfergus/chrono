@@ -70,7 +70,7 @@ float mu = 0.4f;
 float cr = 0.05f;
 double gran_radius = 0.00125;  // 1.25mm radius
 double rho = 4000;
-double spacing = 2.0 * gran_radius;  // Distance between adjacent centers of particles
+double spacing = 2.5 * gran_radius;  // Distance between adjacent centers of particles
 double mass = rho * 4 / 3 * CH_C_PI * gran_radius * gran_radius * gran_radius;
 ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
 
@@ -178,11 +178,11 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     double lowest = 3.0 * spacing;
     ChVector<double> box_center(0, 0, lowest + (height - lowest) / 2.0);
     ChVector<double> half_dims(hx, hy, (height - lowest) / 2.0);
-
+    ChVector<double> padding(spacing);
     utils::GridSampler<> sampler(spacing);
     // utils::HCPSampler<> sampler(gran_radius * 2.0);
 
-    auto points = sampler.SampleBox(box_center, half_dims);
+    auto points = sampler.SampleBox(box_center, half_dims - padding);
 
     auto ballMat = std::make_shared<ChMaterialSurfaceSMC>();
     ballMat->SetYoungModulus(Y);

@@ -44,6 +44,7 @@ typedef struct BodyExchange {
     float pr_kt;
     float restit_gn;
     float gt;
+	int identifier;
 } BodyExchange;
 
 typedef struct BodyUpdate {

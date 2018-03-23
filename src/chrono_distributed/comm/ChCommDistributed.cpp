@@ -45,15 +45,16 @@ ChCommDistributed::ChCommDistributed(ChSystemDistributed* my_sys) {
 
     /* Create and Commit all custom MPI Data Types */
     // Exchange
-    MPI_Datatype type_exchange[4] = {MPI_UNSIGNED, MPI_BYTE, MPI_DOUBLE, MPI_FLOAT};
-    int blocklen_exchange[4] = {1, 1, 20, 6};
-    MPI_Aint disp_exchange[4];
+    MPI_Datatype type_exchange[5] = {MPI_UNSIGNED, MPI_BYTE, MPI_DOUBLE, MPI_FLOAT, MPI_INT};
+    int blocklen_exchange[5] = {1, 1, 20, 6, 1};
+    MPI_Aint disp_exchange[5];
     disp_exchange[0] = offsetof(BodyExchange, gid);
     disp_exchange[1] = offsetof(BodyExchange, collide);
     disp_exchange[2] = offsetof(BodyExchange, pos);
     disp_exchange[3] = offsetof(BodyExchange, mu);
+    disp_exchange[4] = offsetof(BodyExchange, identifier);
     MPI_Datatype temp_type;
-    MPI_Type_create_struct(4, blocklen_exchange, disp_exchange, type_exchange, &temp_type);
+    MPI_Type_create_struct(5, blocklen_exchange, disp_exchange, type_exchange, &temp_type);
     MPI_Aint lb, extent;
     MPI_Type_get_extent(temp_type, &lb, &extent);
     MPI_Type_create_resized(temp_type, lb, extent, &BodyExchangeType);
@@ -689,6 +690,9 @@ void ChCommDistributed::PackExchange(BodyExchange* buf, int index) {
     // Global Id
     buf->gid = ddm->global_id[index];
 
+    // User-controlled identifier
+    buf->identifier = my_sys->bodylist[index]->GetIdentifier();
+
     // Position and rotation
     real3 pos = data_manager->host_data.pos_rigid[index];
     buf->pos[0] = pos.x;
@@ -755,6 +759,9 @@ void ChCommDistributed::PackExchange(BodyExchange* buf, int index) {
 void ChCommDistributed::UnpackExchange(BodyExchange* buf, std::shared_ptr<ChBody> body) {
     // Global Id
     body->SetGid(buf->gid);
+
+    // User-controlled identifier
+    body->SetIdentifier(buf->identifier);
 
     // Position and rotation
     body->SetPos(ChVector<double>(buf->pos[0], buf->pos[1], buf->pos[2]));
