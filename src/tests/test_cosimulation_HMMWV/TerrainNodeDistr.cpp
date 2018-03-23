@@ -23,7 +23,6 @@
 #include <cmath>
 #include <vector>
 #include <set>
-#include <unordered_map>
 
 #include "chrono/ChConfig.h"
 #include "chrono/assets/ChLineShape.h"
@@ -612,7 +611,6 @@ void TerrainNodeDistr::Initialize() {
         delete[] tri_data;
 
         // Receive tire contact material properties.
-        // Create the "tire" contact material, but defer using it until the proxy bodies are created.
         float mat_props[8];
 
         if (OnMaster()) {
@@ -624,7 +622,6 @@ void TerrainNodeDistr::Initialize() {
         // Broadcast to intra-communicator
         MPI_Bcast(mat_props, 8, MPI_FLOAT, m_system->GetMasterRank(), m_system->GetCommunicator());
 
-        // Properties for tire
         auto mat_tire = std::make_shared<ChMaterialSurfaceSMC>();
         mat_tire->SetFriction(mat_props[0]);
         mat_tire->SetRestitution(mat_props[1]);
@@ -673,6 +670,10 @@ void TerrainNodeDistr::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSu
         body->SetCollide(true);
 
         m_system->AddBody(body);
+
+        // Update map global ID -> triangle index
+        m_tire_data[which].m_gids[it] = body->GetGid();
+        m_tire_data[which].m_map[body->GetGid()] = it;
     }
 }
 
@@ -722,8 +723,7 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
 
     m_system->CalculateContactForces();
 
-    std::string msg =
-        " step number: " + std::to_string(step_number) + "  num contacts: " + std::to_string(m_system->GetNcontacts());
+    std::string msg = " step number: " + std::to_string(step_number);
 
     // -----------------------------------------------------------------
     // Loop over all tires, calculate vertex contact forces, send forces
@@ -738,20 +738,24 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
         std::vector<int> vert_indices;
 
         if (step_number > 0) {
+            // Must be called on all ranks to gather forces on master rank.
             ForcesFaceProxies(which, vert_forces, vert_indices);
         }
 
-        //// TODO: This should only happen from the master rank
         // Send vertex indices and forces.
-        int num_vert = (int)vert_indices.size();
-        MPI_Send(vert_indices.data(), num_vert, MPI_INT, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD);
-        MPI_Send(vert_forces.data(), 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD);
+        if (OnMaster()) {
+            int num_vert = (int)vert_indices.size();
+            MPI_Send(vert_indices.data(), num_vert, MPI_INT, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD);
+            MPI_Send(vert_forces.data(), 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD);
 
-        msg += std::to_string(num_vert) + "  ";
+            msg += std::to_string(num_vert) + "  ";
+        }
     }
 
     msg += "]";
-    cout << m_prefix << msg << endl;
+
+    if (OnMaster())
+        cout << m_prefix << msg << endl;
 }
 
 // Set position, orientation, and velocity of proxy bodies based on tire mesh faces.
@@ -836,91 +840,55 @@ void TerrainNodeDistr::ForcesFaceProxies(int which, std::vector<double>& vert_fo
     // Gather contact forces on proxy bodies on the terrain master rank.
     auto force_pairs = m_system->GetBodyContactForces(m_tire_data[which].m_gids);
 
-    /*
+    if (!OnMaster())
+        return;
 
+    // Maintain an unordered map of vertex indices and associated contact forces.
+    std::unordered_map<int, ChVector<>> my_map;
 
-    std::vector<ChVector<double>> forces = m_system->GetBodyContactForces(m_tire_data[which].gids);
+    // Loop over all triangles that experienced contact and accumulate forces on adjacent vertices.
+    for (auto& force_pair : force_pairs) {
+        auto gid = force_pair.first;                             // global ID of the proxy body
+        auto it = m_tire_data[which].m_map[gid];                 // index of corresponding triangle
+        ChVector<int> tri = m_tire_data[which].m_triangles[it];  // adjacent vertex indices
 
+        // Centroid has barycentric coordinates {1/3, 1/3, 1/3}, so force is
+        // distributed equally to the three vertices.
+        ChVector<> force = force_pair.second / 3;
 
-    struct ContactForce_Internal {
-        uint gid;
-        double force[3];
-    };
-
-
-
-    std::vector<std::pair<uint, ChVector<>>> frc = m_system->GetBodyContactForces(m_tire_data[which].gids);
-
-    if (OnMaster()) {
-        // Maintain an unordered map of vertex indices and associated contact forces.
-        std::unordered_map<int, ChVector<>> my_map;
-
-        // TODO: Add count to m_tire_data[which]
-        // TODO: Add gid list in m_tire_data[which]
-        // TODO: Track which trianlges are active and only pass those...
-
-        // NOTE: it -- the index of a triangle in this tire in m_tire_data[which].m_triangles
-        for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
-            Triangle tri = m_tire_data[which].m_triangles[it];
-
-            // Get cumulative contact force at triangle centroid.
-            // TODO Better search
-            real3 rforce;
-            for (uint i = 0; i < count; i++) {
-                if (forces[i].gid == m_tire_data[which].m_proxies[it].gid) {
-                    rforce = real3(forces[i].force[0], forces[i].force[1], forces[i].force[2]);
-                    break;
-                }
-            }
-
-            // Do nothing if zero force.
-            if (IsZero(rforce))
-                continue;
-
-            // Centroid has barycentric coordinates {1/3, 1/3, 1/3}, so force is
-            // distributed equally to the three vertices.
-            ChVector<> force(rforce.x / 3, rforce.y / 3, rforce.z / 3);
-
-            // For each vertex of the triangle, if it appears in the map, increment
-            // the total contact force. Otherwise, insert a new entry in the map.
-            auto v1 = my_map.find(tri.v1);
-            if (v1 != my_map.end()) {
-                v1->second += force;
-            } else {
-                my_map[tri.v1] = force;
-            }
-
-            auto v2 = my_map.find(tri.v2);
-            if (v2 != my_map.end()) {
-                v2->second += force;
-            } else {
-                my_map[tri.v2] = force;
-            }
-
-            auto v3 = my_map.find(tri.v3);
-            if (v3 != my_map.end()) {
-                v3->second += force;
-            } else {
-                my_map[tri.v3] = force;
-            }
+        // For each vertex of the triangle, if it appears in the map, increment
+        // the total contact force. Otherwise, insert a new entry in the map.
+        auto v1 = my_map.find(tri[0]);
+        if (v1 != my_map.end()) {
+            v1->second += force;
+        } else {
+            my_map[tri[0]] = force;
         }
 
-        // Extract map keys (indices of vertices in contact) and map values
-        // (corresponding contact forces) and load output vectors.
-        // Note: could improve efficiency by reserving space for vectors.
-        for (auto kv : my_map) {
-            vert_indices.push_back(kv.first);
-            vert_forces.push_back(kv.second.x());
-            vert_forces.push_back(kv.second.y());
-            vert_forces.push_back(kv.second.z());
+        auto v2 = my_map.find(tri[1]);
+        if (v2 != my_map.end()) {
+            v2->second += force;
+        } else {
+            my_map[tri[1]] = force;
         }
-    }  // End of only MASTER rank
 
-    delete[] forces;
+        auto v3 = my_map.find(tri[2]);
+        if (v3 != my_map.end()) {
+            v3->second += force;
+        } else {
+            my_map[tri[2]] = force;
+        }
+    }
 
-    
-*/    
-    
+    // Extract map keys (indices of vertices in contact) and map values
+    // (corresponding contact forces) and load output vectors.
+    // Note: could improve efficiency by reserving space for vectors.
+    for (auto kv : my_map) {
+        vert_indices.push_back(kv.first);
+        vert_forces.push_back(kv.second.x());
+        vert_forces.push_back(kv.second.y());
+        vert_forces.push_back(kv.second.z());
+    }
 }
 
 // -----------------------------------------------------------------------------

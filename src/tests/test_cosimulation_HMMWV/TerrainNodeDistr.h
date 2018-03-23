@@ -23,6 +23,7 @@
 #define HMMWV_COSIM_TERRAINNODEDISTR_H
 
 #include <vector>
+#include <unordered_map>
 
 #include "chrono/utils/ChUtilsCreators.h"
 #include "chrono/utils/ChUtilsGenerators.h"
@@ -136,6 +137,7 @@ class TerrainNodeDistr : public BaseNode {
         std::vector<chrono::ChVector<>> m_vertex_pos;    ///< mesh vertex positions
         std::vector<chrono::ChVector<>> m_vertex_vel;    ///< mesh vertex velocities
         std::vector<chrono::ChVector<int>> m_triangles;  ///< tire mesh connectivity
+        std::unordered_map<uint, uint> m_map;            ///< map from global ID to triangle index
         unsigned int m_num_vert;                         ///< number of tire mesh vertices
         unsigned int m_num_tri;                          ///< number of tire mesh triangles
         unsigned int m_start_tri;                        ///< start triangle index for proxy body identifiers
