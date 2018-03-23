@@ -194,6 +194,9 @@ void ChSystemDistributed::AddBodyAllRanks(std::shared_ptr<ChBody> newbody) {
 }
 
 void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
+    // Assign global ID to the body (whether or not it is kept on this rank)
+    newbody->SetGid(num_bodies_global);
+
     // Increment global body ID counter.
     num_bodies_global++;
 
@@ -202,7 +205,6 @@ void ChSystemDistributed::AddBody(std::shared_ptr<ChBody> newbody) {
         return;
     }
 
-    newbody->SetGid(num_bodies_global - 1);
     distributed::COMM_STATUS status = domain->GetBodyRegion(newbody);
 
     // Check for collision with this sub-domain
