@@ -234,10 +234,28 @@ void TireNode::Initialize() {
     // Send tire contact surface and material properties
     // -------------------------------------------------
 
+    // Number of vertices and triangles
     MPI_Send(surf_props.data(), 2, MPI_UNSIGNED, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
     if (m_verbose)
         cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
 
+    // Mesh connectivity
+    std::vector<ChVector<>> vert_pos;  // ignored here
+    std::vector<ChVector<>> vert_vel;  // ignored here
+    std::vector<ChVector<int>> triangles;
+    m_tire_wrapper->GetMeshState(vert_pos, vert_vel, triangles);
+
+    unsigned int num_tri = (unsigned int)triangles.size();
+    int* tri_data = new int[3 * num_tri];
+    for (unsigned int it = 0; it < num_tri; it++) {
+        tri_data[3 * it + 0] = triangles[it].x();
+        tri_data[3 * it + 1] = triangles[it].y();
+        tri_data[3 * it + 2] = triangles[it].z();
+    }
+    MPI_Send(tri_data, 3 * num_tri, MPI_INT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
+    delete[] tri_data;
+
+    // Material properties
     MPI_Send(mat_props.data(), 8, MPI_FLOAT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
     if (m_verbose)
         cout << m_prefix << " friction = " << mat_props[0] << endl;
@@ -442,7 +460,7 @@ void TireNode::Synchronize(int step_number, double time) {
     // Extract tire mesh vertex locations and velocites.
     std::vector<ChVector<>> vert_pos;
     std::vector<ChVector<>> vert_vel;
-    std::vector<ChVector<int>> triangles;
+    std::vector<ChVector<int>> triangles;  // ignored here
     m_tire_wrapper->GetMeshState(vert_pos, vert_vel, triangles);
 
     // Display information on lowest contact vertex.
@@ -452,9 +470,7 @@ void TireNode::Synchronize(int step_number, double time) {
 
     // Send tire mesh vertex locations and velocities to the terrain node
     unsigned int num_vert = (unsigned int)vert_pos.size();
-    unsigned int num_tri = (unsigned int)triangles.size();
     double* vert_data = new double[2 * 3 * num_vert];
-    int* tri_data = new int[3 * num_tri];
     for (unsigned int iv = 0; iv < num_vert; iv++) {
         vert_data[3 * iv + 0] = vert_pos[iv].x();
         vert_data[3 * iv + 1] = vert_pos[iv].y();
@@ -465,13 +481,7 @@ void TireNode::Synchronize(int step_number, double time) {
         vert_data[3 * num_vert + 3 * iv + 1] = vert_vel[iv].y();
         vert_data[3 * num_vert + 3 * iv + 2] = vert_vel[iv].z();
     }
-    for (unsigned int it = 0; it < num_tri; it++) {
-        tri_data[3 * it + 0] = triangles[it].x();
-        tri_data[3 * it + 1] = triangles[it].y();
-        tri_data[3 * it + 2] = triangles[it].z();
-    }
     MPI_Send(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, TERRAIN_NODE_RANK, step_number, MPI_COMM_WORLD);
-    MPI_Send(tri_data, 3 * num_tri, MPI_INT, TERRAIN_NODE_RANK, step_number, MPI_COMM_WORLD);
 
     // Receive terrain forces.
     // Note that we use MPI_Probe to figure out the number of indices and forces received.
@@ -504,7 +514,6 @@ void TireNode::Synchronize(int step_number, double time) {
     }
 
     delete[] vert_data;
-    delete[] tri_data;
 
     delete[] index_data;
     delete[] force_data;

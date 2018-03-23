@@ -591,6 +591,26 @@ void TerrainNodeDistr::Initialize() {
         m_tire_data[which].m_start_tri = start_tri_index;
         start_tri_index += surf_props[1];
 
+        // Receive tire mesh connectivity.
+        unsigned int num_tri = m_tire_data[which].m_num_tri;
+        int* tri_data = new int[3 * num_tri];
+
+        if (OnMaster()) {
+            MPI_Status status_c;
+            MPI_Recv(tri_data, 3 * num_tri, MPI_INT, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_c);
+        }
+
+        // Broadcast to intra-communicator
+        MPI_Bcast(tri_data, 3 * num_tri, MPI_INT, m_system->GetMasterRank(), m_system->GetCommunicator());
+
+        for (unsigned int it = 0; it < num_tri; it++) {
+            m_tire_data[which].m_triangles[it][0] = tri_data[3 * it + 0];
+            m_tire_data[which].m_triangles[it][1] = tri_data[3 * it + 1];
+            m_tire_data[which].m_triangles[it][2] = tri_data[3 * it + 2];
+        }
+
+        delete[] tri_data;
+
         // Receive tire contact material properties.
         // Create the "tire" contact material, but defer using it until the proxy bodies are created.
         float mat_props[8];
@@ -671,18 +691,14 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
         // Receive tire mesh vertex locations and velocities.
         MPI_Status status;
         unsigned int num_vert = m_tire_data[which].m_num_vert;
-        unsigned int num_tri = m_tire_data[which].m_num_tri;
         double* vert_data = new double[2 * 3 * num_vert];
-        int* tri_data = new int[3 * num_tri];
 
         if (OnMaster()) {
             MPI_Recv(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD, &status);
-            MPI_Recv(tri_data, 3 * num_tri, MPI_INT, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD, &status);
         }
 
         // Brodcast to intra-communicator
         MPI_Bcast(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, m_system->GetMasterRank(), m_system->GetCommunicator());
-        MPI_Bcast(tri_data, 3 * num_tri, MPI_INT, m_system->GetMasterRank(), m_system->GetCommunicator());
 
         for (unsigned int iv = 0; iv < num_vert; iv++) {
             unsigned int offset = 3 * iv;
@@ -693,14 +709,7 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
                 ChVector<>(vert_data[offset + 0], vert_data[offset + 1], vert_data[offset + 2]);
         }
 
-        for (unsigned int it = 0; it < num_tri; it++) {
-            m_tire_data[which].m_triangles[it][0] = tri_data[3 * it + 0];
-            m_tire_data[which].m_triangles[it][1] = tri_data[3 * it + 1];
-            m_tire_data[which].m_triangles[it][2] = tri_data[3 * it + 2];
-        }
-
         delete[] vert_data;
-        delete[] tri_data;
 
         // Set position, rotation, and velocity of proxy bodies.
         UpdateFaceProxies(which);

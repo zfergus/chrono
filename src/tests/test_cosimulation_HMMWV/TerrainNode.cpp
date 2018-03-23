@@ -642,8 +642,10 @@ void TerrainNode::Initialize() {
     for (int which = 0; which < m_num_tires; which++) {
         // Receive tire contact surface specification.
         unsigned int surf_props[2];
+
         MPI_Status status_p;
         MPI_Recv(surf_props, 2, MPI_UNSIGNED, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_p);
+        
         m_tire_data[which].m_num_vert = surf_props[0];
         m_tire_data[which].m_num_tri = surf_props[1];
 
@@ -658,9 +660,24 @@ void TerrainNode::Initialize() {
         if (m_verbose)
             cout << m_prefix << " Received vertices = " << surf_props[0] << " triangles = " << surf_props[1] << endl;
 
+        // Receive tire mesh connectivity.
+        unsigned int num_tri = m_tire_data[which].m_num_tri;
+        int* tri_data = new int[3 * num_tri];
+        MPI_Status status_c;
+        MPI_Recv(tri_data, 3 * num_tri, MPI_INT, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_c);
+
+        for (unsigned int it = 0; it < num_tri; it++) {
+            m_tire_data[which].m_triangles[it].v1 = tri_data[3 * it + 0];
+            m_tire_data[which].m_triangles[it].v2 = tri_data[3 * it + 1];
+            m_tire_data[which].m_triangles[it].v3 = tri_data[3 * it + 2];
+        }
+
+        delete[] tri_data;
+
         // Receive tire contact material properties.
         // Create the "tire" contact material, but defer using it until the proxy bodies are created.
         float mat_props[8];
+
         MPI_Status status_m;
         MPI_Recv(mat_props, 8, MPI_FLOAT, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_m);
 
@@ -790,11 +807,8 @@ void TerrainNode::Synchronize(int step_number, double time) {
         // Receive tire mesh vertex locations and velocities.
         MPI_Status status;
         unsigned int num_vert = m_tire_data[which].m_num_vert;
-        unsigned int num_tri = m_tire_data[which].m_num_tri;
         double* vert_data = new double[2 * 3 * num_vert];
-        int* tri_data = new int[3 * num_tri];
         MPI_Recv(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD, &status);
-        MPI_Recv(tri_data, 3 * num_tri, MPI_INT, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD, &status);
 
         for (unsigned int iv = 0; iv < num_vert; iv++) {
             unsigned int offset = 3 * iv;
@@ -805,14 +819,7 @@ void TerrainNode::Synchronize(int step_number, double time) {
                 ChVector<>(vert_data[offset + 0], vert_data[offset + 1], vert_data[offset + 2]);
         }
 
-        for (unsigned int it = 0; it < num_tri; it++) {
-            m_tire_data[which].m_triangles[it].v1 = tri_data[3 * it + 0];
-            m_tire_data[which].m_triangles[it].v2 = tri_data[3 * it + 1];
-            m_tire_data[which].m_triangles[it].v3 = tri_data[3 * it + 2];
-        }
-
         delete[] vert_data;
-        delete[] tri_data;
 
         // Set position, rotation, and velocity of proxy bodies.
         switch (m_type) {
