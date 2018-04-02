@@ -28,7 +28,7 @@
 #include "GeometryUtils.h"
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
-// #include "chrono_opengl/ChOpenGLWindow.h"
+#include "chrono_opengl/ChOpenGLWindow.h"
 
 using namespace chrono;
 using namespace chrono::collision;
@@ -59,9 +59,9 @@ bool GetProblemSpecs(int argc,
 void ShowUsage();
 
 // Material Properties
-float Y = 2e6f;
-float mu = 0.4f;
-float cr = 0.05f;
+float Y = 1e7f;
+float mu = 0.3f;
+float cr = 0.1f;
 
 // Radius generation
 double mean_radius = 0.05;
@@ -69,6 +69,7 @@ double stddev_radius = 0.0125 / 2.0;
 double rad_min = 0.025;
 double rad_max = 0.075;
 unsigned seed = 132;
+
 std::default_random_engine generator(seed);
 std::normal_distribution<double> rad_dist(mean_radius, stddev_radius);
 inline double GetRadius() {
@@ -81,7 +82,7 @@ inline double GetRadius() {
         return rad_max;
 }
 
-double rho = 2000;
+double rho = 2500.0;
 inline double GetMass(double r) {
     return 4.0 * CH_C_PI * r * r * r / 3.0;  // TODO shape dependent: more complicated than you'd think...
 }
@@ -93,17 +94,16 @@ inline ChVector<> GetInertia(double m, double r) {
 double spacing = 2 * rad_max;  // Distance between adjacent centers of particles
 
 // Dimensions
-double hy = 20 * rad_max;                    // 50             // Half y dimension
-double height = 150 * rad_max;               // 150          // Height of the box
-double slope_angle = CH_C_PI / 4;            // Angle of sloped wall from the horizontal
+double hy = 50 * rad_max;                    // 50             // Half y dimension
+double height = 50 * rad_max;               // 150          // Height of the box
+double slope_angle = CH_C_PI / 5;            // Angle of sloped wall from the horizontal
 double dx = height / std::tan(slope_angle);  // x width of slope
 double settling_gap = 0 * rad_max;           // Width of opening of the hopper during settling phase
 double pouring_gap = 6 * rad_max;            // Width of opening of the hopper during pouring phase
-double settling_time = 1;
+double settling_time = 1.5;
 #ifndef PAR
 int split_axis = 2;  // Split domain along z axis // TODO
 #endif
-
 size_t high_x_wall;
 
 // Simulation
@@ -112,6 +112,11 @@ double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
 double remove_fps = 60;
+
+double layer_thickness = 3 * spacing;
+int num_layers = (int)(height / layer_thickness);
+double layer_fall_time = std::sqrt(2 * (layer_thickness + 2 * rad_max) / 9.8);
+int layer_fall_steps = (int)(layer_fall_time / time_step);
 
 // Geometry
 enum { SPHERE_H, BISPHERE_H, SPHERE_BISPHERE_H, ASYM_H, SPHERE_ASYM_H, SPHERE_BISPHERE_ASYM_H };
@@ -284,7 +289,36 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     int ballId = 0;
     double dz = rad_max * std::sin(CH_C_PI_2 - slope_angle);
     for (int i = 0; i < points.size(); i++) {
-        if (points[i].z() > (height * points[i].x()) / dx + 2 * dz) {
+        if (points[i].z() > (height * points[i].x()) / dx + 2 * dz && points[i].z() > height - 1.5 * spacing) {
+            double r = GetRadius();
+            auto ball = CreateBall(points[i], ballMat, ballId, r);
+            sys->AddBody(ball);
+            count++;
+        }
+    }
+
+    return count;
+}
+
+size_t AddLayerOfBalls(ChSystemDistributed* sys) {
+    std::cout << "LAYER\n";
+    utils::HCPSampler<> sampler(spacing);
+    size_t count = 0;
+    auto ballMat = std::make_shared<ChMaterialSurfaceSMC>();
+    ballMat->SetYoungModulus(Y);
+    ballMat->SetFriction(mu);
+    ballMat->SetRestitution(cr);
+    ballMat->SetAdhesion(0);
+
+    ChVector<double> box_center(dx / 2, 0, height);
+    ChVector<double> h_dims(dx / 2, hy, layer_thickness / 2.0);
+    ChVector<double> padding = 2 * rad_max * ChVector<double>(1, 1, 0);
+    ChVector<double> half_dims = h_dims - padding;
+    auto points = sampler.SampleBox(box_center, half_dims);
+    int ballId = 0;
+    double dz = rad_max * std::sin(CH_C_PI_2 - slope_angle);
+    for (int i = 0; i < points.size(); i++) {
+        if (points[i].z() > (height * points[i].x() - 10 * spacing) / dx + 2) {
             double r = GetRadius();
             auto ball = CreateBall(points[i], ballMat, ballId, r);
             sys->AddBody(ball);
@@ -414,11 +448,11 @@ int main(int argc, char* argv[]) {
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
     auto cb = AddContainer(&my_sys);
-    auto actual_num_bodies = AddFallingBalls(&my_sys);
-    MPI_Barrier(my_sys.GetCommunicator());
-
-    if (my_rank == MASTER)
-        std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
+    // auto actual_num_bodies = AddFallingBalls(&my_sys);
+    // MPI_Barrier(my_sys.GetCommunicator());
+    //
+    // if (my_rank == MASTER)
+    //     std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
 
     // Once the directory has been created, all ranks can make their output files
     MPI_Barrier(my_sys.GetCommunicator());
@@ -443,10 +477,15 @@ int main(int argc, char* argv[]) {
     double t_start = MPI_Wtime();
 
     // // Perform the simulation
+    // int layer_count = 0;
     // opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
     // gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
     // gl_window.SetCamera(ChVector<>(-20 * rad_max, -100 * rad_max, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
     // 0.01f); gl_window.SetRenderMode(opengl::WIREFRAME); for (int i = 0; gl_window.Active(); i++) {
+    //     if (layer_count < num_layers && i % layer_fall_steps == 0) {
+    //         AddLayerOfBalls(&my_sys);
+    //         layer_count++;
+    //     }
     //     gl_window.DoStepDynamics(time_step);
     //     time += time_step;
     //     if (settling && time >= settling_time) {
@@ -459,7 +498,12 @@ int main(int argc, char* argv[]) {
     //     gl_window.Render();
     // }
 
+    int layer_count = 0;
     for (int i = 0; i < num_steps; i++) {
+        if (layer_count < num_layers && i % layer_fall_steps == 0) {
+            AddLayerOfBalls(&my_sys);
+            layer_count++;
+        }
         my_sys.DoStepDynamics(time_step);
         time += time_step;
 
