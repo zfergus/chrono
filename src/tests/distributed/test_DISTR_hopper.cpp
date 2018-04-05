@@ -28,7 +28,7 @@
 #include "GeometryUtils.h"
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
-#include "chrono_opengl/ChOpenGLWindow.h"
+// #include "chrono_opengl/ChOpenGLWindow.h"
 
 using namespace chrono;
 using namespace chrono::collision;
@@ -64,10 +64,10 @@ float mu = 0.3f;
 float cr = 0.1f;
 
 // Radius generation
-double mean_radius = 0.05;
-double stddev_radius = 0.0125 / 2.0;
-double rad_min = 0.025;
+double rad_min = 0.05;
 double rad_max = 0.075;
+double mean_radius = (rad_max - rad_min) / 2.0;
+double stddev_radius = (rad_max - rad_min) / 4.0;
 unsigned seed = 132;
 
 std::default_random_engine generator(seed);
@@ -95,7 +95,7 @@ double spacing = 2 * rad_max;  // Distance between adjacent centers of particles
 
 // Dimensions
 double hy = 50 * rad_max;                    // 50             // Half y dimension
-double height = 50 * rad_max;               // 150          // Height of the box
+double height = 200 * rad_max;               // 150          // Height of the box
 double slope_angle = CH_C_PI / 5;            // Angle of sloped wall from the horizontal
 double dx = height / std::tan(slope_angle);  // x width of slope
 double settling_gap = 0 * rad_max;           // Width of opening of the hopper during settling phase
@@ -107,12 +107,13 @@ int split_axis = 2;  // Split domain along z axis // TODO
 size_t high_x_wall;
 
 // Simulation
-double time_step = 5e-5;
+double time_step = 1e-5;
 double out_fps = 120;
 unsigned int max_iteration = 100;
 double tolerance = 1e-4;
 double remove_fps = 60;
 
+// For layered addition
 double layer_thickness = 3 * spacing;
 int num_layers = (int)(height / layer_thickness);
 double layer_fall_time = std::sqrt(2 * (layer_thickness + 2 * rad_max) / 9.8);
@@ -289,7 +290,7 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     int ballId = 0;
     double dz = rad_max * std::sin(CH_C_PI_2 - slope_angle);
     for (int i = 0; i < points.size(); i++) {
-        if (points[i].z() > (height * points[i].x()) / dx + 2 * dz && points[i].z() > height - 1.5 * spacing) {
+        if (points[i].z() > (height * points[i].x()) / dx + 2 * dz) {
             double r = GetRadius();
             auto ball = CreateBall(points[i], ballMat, ballId, r);
             sys->AddBody(ball);
@@ -425,34 +426,25 @@ int main(int argc, char* argv[]) {
 
     my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
 
-    int binX, binY, binZ;
     double factor = 3;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
     ChVector<> subsize = (subhi - sublo) / (2 * rad_max);
-    binX = (int)std::ceil(subsize.x() / factor);
-    if (binX == 0)
-        binX = 1;
 
-    binY = (int)std::ceil(subsize.y() / factor);
-    if (binY == 0)
-        binY = 1;
+    int binX = std::max((int)std::ceil(subsize.x() / factor), 1);
+    int binY = std::max((int)std::ceil(subsize.y() / factor), 1);
+    int binZ = std::max((int)std::ceil(subsize.z() / factor), 1);
 
-    binZ = (int)std::ceil(height / (2.0 * factor));
-    if (binZ == 0)
-        binZ = 1;
-
-    // TODO Bins
     my_sys.GetSettings()->collision.bins_per_axis = vec3(binX, binY, binZ);
     if (verbose)
         printf("Rank: %d   bins: %d %d %d\n", my_rank, binX, binY, binZ);
 
     auto cb = AddContainer(&my_sys);
-    // auto actual_num_bodies = AddFallingBalls(&my_sys);
-    // MPI_Barrier(my_sys.GetCommunicator());
-    //
-    // if (my_rank == MASTER)
-    //     std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
+    auto actual_num_bodies = AddFallingBalls(&my_sys);
+    MPI_Barrier(my_sys.GetCommunicator());
+
+    if (my_rank == MASTER)
+        std::cout << "Total number of particles: " << actual_num_bodies << std::endl;
 
     // Once the directory has been created, all ranks can make their output files
     MPI_Barrier(my_sys.GetCommunicator());
@@ -476,64 +468,55 @@ int main(int argc, char* argv[]) {
     bool settling = true;
     double t_start = MPI_Wtime();
 
-    // // Perform the simulation
-    // int layer_count = 0;
-    // opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
-    // gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
-    // gl_window.SetCamera(ChVector<>(-20 * rad_max, -100 * rad_max, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1),
-    // 0.01f); gl_window.SetRenderMode(opengl::WIREFRAME); for (int i = 0; gl_window.Active(); i++) {
-    //     if (layer_count < num_layers && i % layer_fall_steps == 0) {
-    //         AddLayerOfBalls(&my_sys);
-    //         layer_count++;
-    //     }
-    //     gl_window.DoStepDynamics(time_step);
-    //     time += time_step;
-    //     if (settling && time >= settling_time) {
-    //         settling = false;
-    //         cb->UpdatePlane(high_x_wall,
-    //                         ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
-    //     }
-    //     if (i % remove_steps == 0)
-    //         my_sys.RemoveBodiesBelow(-2 * spacing);
-    //     gl_window.Render();
-    // }
-
+    // Perform the simulation
     int layer_count = 0;
-    for (int i = 0; i < num_steps; i++) {
-        if (layer_count < num_layers && i % layer_fall_steps == 0) {
-            AddLayerOfBalls(&my_sys);
-            layer_count++;
-        }
-        my_sys.DoStepDynamics(time_step);
+    opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
+    gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
+    gl_window.SetCamera(ChVector<>(-20 * rad_max, -100 * rad_max, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.01f);
+    gl_window.SetRenderMode(opengl::WIREFRAME);
+    for (int i = 0; gl_window.Active(); i++) {
+        gl_window.DoStepDynamics(time_step);
         time += time_step;
-
-        if (i % out_steps == 0) {
-            if (my_rank == MASTER)
-                std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
-            if (output_data) {
-                WriteCSV(&outfile, out_frame, &my_sys);
-                out_frame++;
-            }
-        }
-
-        if (monitor)
-            Monitor(&my_sys, my_rank);
         if (settling && time >= settling_time) {
             settling = false;
             cb->UpdatePlane(high_x_wall,
                             ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
         }
-        if (!settling && i % remove_steps == 0) {
-            int remove_count = my_sys.RemoveBodiesBelow(-2 * spacing);
-            if (my_rank == MASTER)
-                std::cout << remove_count << " bodies removed" << std::endl;
-            // TODO: track pour rate
-        }
+        if (i % remove_steps == 0)
+            my_sys.RemoveBodiesBelow(-2 * spacing);
+        gl_window.Render();
     }
-    double elapsed = MPI_Wtime() - t_start;
 
-    if (my_rank == MASTER)
-        std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
+    // for (int i = 0; i < num_steps; i++) {
+    //     my_sys.DoStepDynamics(time_step);
+    //     time += time_step;
+    //
+    //     if (i % out_steps == 0) {
+    //         if (my_rank == MASTER)
+    //             std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
+    //         if (output_data) {
+    //             WriteCSV(&outfile, out_frame, &my_sys);
+    //             out_frame++;
+    //         }
+    //     }
+    //
+    //     if (monitor)
+    //         Monitor(&my_sys, my_rank);
+    //     if (settling && time >= settling_time) {
+    //         settling = false;
+    //         cb->UpdatePlane(high_x_wall,
+    //                         ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
+    //     }
+    //     if (!settling && i % remove_steps == 0) {
+    //         int remove_count = my_sys.RemoveBodiesBelow(-2 * spacing);
+    //         if (my_rank == MASTER)
+    //             std::cout << remove_count << " bodies removed" << std::endl;
+    //     }
+    // }
+    // double elapsed = MPI_Wtime() - t_start;
+    //
+    // if (my_rank == MASTER)
+    //     std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
 
     if (output_data)
         outfile.close();
