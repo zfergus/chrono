@@ -312,16 +312,6 @@ int main(int argc, char** argv) {
             break;
     }
 
-
-
-
-    MPI_Finalize();
-    return 0;
-
-
-
-
-
     // Number of simulation steps between miscellaneous events.
     int sim_steps = (int)std::ceil(sim_time / step_size);
     int output_steps = (int)std::ceil(1 / (output_fps * step_size));

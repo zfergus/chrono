@@ -48,29 +48,33 @@ endif()
 
 # ------------------------------------------------------------------------------
 
-set(PROGRAMS test_cosimulation_HMMWV)
+message(STATUS "Test programs for CO-SIMULATION...")
 
-set(TEST_FILES 
+set(COMMON_FILES 
     BaseNode.h
     BaseNode.cpp
     VehicleNode.h
     VehicleNode.cpp
     TireNode.h
     TireNode.cpp
-    TerrainNode.h
-    TerrainNode.cpp
     )
 
+set(PROGRAM test_cosimulation_HMMWV)
+set(TEST_FILES "${COMMON_FILES}" TerrainNode.h TerrainNode.cpp)
+
+message(STATUS "...add ${PROGRAM}")
+add_executable(${PROGRAM} ${PROGRAM}.cpp ${TEST_FILES})    
+source_group("" FILES ${PROGRAM}.cpp ${TEST_FILES})
+set_target_properties(${PROGRAM} PROPERTIES 
+                      COMPILE_FLAGS "${COMPILER_FLAGS}"
+                      LINK_FLAGS "${LINKER_FLAGS}")
+target_link_libraries(${PROGRAM} ${LIBRARIES})
+
+
 if(ENABLE_MODULE_DISTRIBUTED)
-    set(PROGRAMS "${PROGRAMS}" test_cosimulation_HMMWV_DISTR)
-    set(TEST_FILES "${TEST_FILES}" TerrainNodeDistr.h TerrainNodeDistr.cpp)
-endif()
+    set(PROGRAM test_cosimulation_HMMWV_DISTR)
+    set(TEST_FILES "${COMMON_FILES}" TerrainNodeDistr.h TerrainNodeDistr.cpp)
 
-# ------------------------------------------------------------------------------
-
-message(STATUS "Test programs for CO-SIMULATION...")
-
-foreach(PROGRAM ${PROGRAMS})
     message(STATUS "...add ${PROGRAM}")
     add_executable(${PROGRAM} ${PROGRAM}.cpp ${TEST_FILES})    
     source_group("" FILES ${PROGRAM}.cpp ${TEST_FILES})
@@ -78,4 +82,4 @@ foreach(PROGRAM ${PROGRAMS})
                           COMPILE_FLAGS "${COMPILER_FLAGS}"
                           LINK_FLAGS "${LINKER_FLAGS}")
     target_link_libraries(${PROGRAM} ${LIBRARIES})
-endforeach()
+endif()

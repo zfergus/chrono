@@ -987,7 +987,8 @@ void TerrainNodeDistr::WriteParticleInformation(utils::CSV_writer& csv) {
     int i = -1;
     for (auto body : *m_system->data_manager->body_list) {
         i++;
-        if (m_system->ddm->comm_status[i] == chrono::distributed::EMPTY)
+        auto status = m_system->ddm->comm_status[i];
+        if (status != distributed::OWNED && status != distributed::SHARED_UP && status != distributed::SHARED_DOWN)
             continue;
         if (body->GetIdentifier() < m_Id_g)
             continue;
