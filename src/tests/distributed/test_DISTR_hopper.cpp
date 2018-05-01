@@ -28,7 +28,11 @@
 #include "GeometryUtils.h"
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
+//#undef CHRONO_OPENGL
+
+#ifdef CHRONO_OPENGL
 #include "chrono_opengl/ChOpenGLWindow.h"
+#endif
 
 using namespace chrono;
 using namespace chrono::collision;
@@ -469,7 +473,9 @@ int main(int argc, char* argv[]) {
     double t_start = MPI_Wtime();
 
     // Perform the simulation
-    int layer_count = 0;
+
+#ifdef CHRONO_OPENGL
+
     opengl::ChOpenGLWindow& gl_window = opengl::ChOpenGLWindow::getInstance();
     gl_window.Initialize(1280, 720, "Boundary test SMC", &my_sys);
     gl_window.SetCamera(ChVector<>(-20 * rad_max, -100 * rad_max, 0), ChVector<>(0, 0, 0), ChVector<>(0, 0, 1), 0.01f);
@@ -487,36 +493,40 @@ int main(int argc, char* argv[]) {
         gl_window.Render();
     }
 
-    // for (int i = 0; i < num_steps; i++) {
-    //     my_sys.DoStepDynamics(time_step);
-    //     time += time_step;
-    //
-    //     if (i % out_steps == 0) {
-    //         if (my_rank == MASTER)
-    //             std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
-    //         if (output_data) {
-    //             WriteCSV(&outfile, out_frame, &my_sys);
-    //             out_frame++;
-    //         }
-    //     }
-    //
-    //     if (monitor)
-    //         Monitor(&my_sys, my_rank);
-    //     if (settling && time >= settling_time) {
-    //         settling = false;
-    //         cb->UpdatePlane(high_x_wall,
-    //                         ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
-    //     }
-    //     if (!settling && i % remove_steps == 0) {
-    //         int remove_count = my_sys.RemoveBodiesBelow(-2 * spacing);
-    //         if (my_rank == MASTER)
-    //             std::cout << remove_count << " bodies removed" << std::endl;
-    //     }
-    // }
-    // double elapsed = MPI_Wtime() - t_start;
-    //
-    // if (my_rank == MASTER)
-    //     std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
+#else
+
+     for (int i = 0; i < num_steps; i++) {
+         my_sys.DoStepDynamics(time_step);
+         time += time_step;
+    
+         if (i % out_steps == 0) {
+             if (my_rank == MASTER)
+                 std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
+             if (output_data) {
+                 WriteCSV(&outfile, out_frame, &my_sys);
+                 out_frame++;
+             }
+         }
+    
+         if (monitor)
+             Monitor(&my_sys, my_rank);
+         if (settling && time >= settling_time) {
+             settling = false;
+             cb->UpdatePlane(high_x_wall,
+                             ChFrame<>(ChVector<>(pouring_gap + dx / 2, 0, height / 2), Q_from_AngY(-slope_angle)));
+         }
+         if (!settling && i % remove_steps == 0) {
+             int remove_count = my_sys.RemoveBodiesBelow(-2 * spacing);
+             if (my_rank == MASTER)
+                 std::cout << remove_count << " bodies removed" << std::endl;
+         }
+     }
+     double elapsed = MPI_Wtime() - t_start;
+    
+     if (my_rank == MASTER)
+         std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
+
+#endif
 
     if (output_data)
         outfile.close();
