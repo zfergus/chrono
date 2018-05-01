@@ -28,7 +28,7 @@
 #include "GeometryUtils.h"
 #include "chrono_parallel/solver/ChIterativeSolverParallel.h"
 
-// #include "chrono_opengl/ChOpenGLWindow.h"
+#include "chrono_opengl/ChOpenGLWindow.h"
 
 using namespace chrono;
 using namespace chrono::collision;
