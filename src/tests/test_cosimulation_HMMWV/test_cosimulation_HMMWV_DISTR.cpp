@@ -46,7 +46,24 @@ using namespace chrono::vehicle;
 // =============================================================================
 
 // Cosimulation step size
-double step_size = 4e-5;
+////double step_size = 4e-5;
+double step_size = 1e-3;
+
+// Tire model
+////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
+std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
+
+// Terrain settling time
+double time_settling = 1;
+
+// Terrain granular material parameters
+double particle_radius = 0.05;
+double particle_density = 2500;
+
+// Terrain container dimensions
+double container_length = 10;
+double container_width = 3;
+double container_height = 1;
 
 // Output frequency (frames per second)
 double output_fps = 200;
@@ -177,9 +194,6 @@ int main(int argc, char** argv) {
     ////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
 
     // Terrain dimensions
-    double container_length = 10;
-    double container_width = 3;
-    double container_height = 1;
     std::shared_ptr<ChBezierCurve> path;
 
     // Create the systems and run the settling phase for terrain.
@@ -230,8 +244,7 @@ int main(int argc, char** argv) {
         case TIRE_NODE_RANK(2):
         case TIRE_NODE_RANK(3): {
             int wheel_id = rank - 2;
-            my_tire =
-                new TireNode(vehicle::GetDataFile("hmmwv/tire/HMMWV_ANCFTire.json"), WheelID(wheel_id), nthreads_tire);
+            my_tire = new TireNode(vehicle::GetDataFile(tire_filename), WheelID(wheel_id), nthreads_tire);
             ////my_tire->SetVerbose(false);
             my_tire->SetStepSize(step_size);
             my_tire->SetOutDir(out_dir, suffix);
@@ -262,8 +275,7 @@ int main(int argc, char** argv) {
 
             my_terrain->SetContainerDimensions(container_length, container_width, container_height, 0);
 
-            double radius = 0.1;
-            float coh_force = static_cast<float>(CH_C_PI * radius * radius * coh_pressure);
+            float coh_force = static_cast<float>(CH_C_PI * particle_radius * particle_radius * coh_pressure);
 
             auto material = std::make_shared<ChMaterialSurfaceSMC>();
             material->SetFriction(0.9f);
@@ -280,8 +292,8 @@ int main(int argc, char** argv) {
             my_terrain->SetContactForceModel(ChSystemSMC::PlainCoulomb);
 
             my_terrain->SetProxyProperties(1, false);
-            my_terrain->SetGranularMaterial(radius, 2500, 6);
-            my_terrain->SetSettlingTime(0.5);
+            my_terrain->SetGranularMaterial(particle_radius, particle_density, 6);
+            my_terrain->SetSettlingTime(time_settling);
             ////my_terrain->EnableSettlingOutput(true);
             my_terrain->Settle(use_checkpoint);
 

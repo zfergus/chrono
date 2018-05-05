@@ -42,6 +42,9 @@ using namespace chrono;
 
 const std::string TerrainNodeDistr::m_checkpoint_filename = "checkpoint.dat";
 
+utils::SamplingType sampling_type = utils::POISSON_DISK;
+////utils::SamplingType sampling_type = utils::REGULAR_GRID;
+
 // -----------------------------------------------------------------------------
 // Free functions in the cosim namespace
 // -----------------------------------------------------------------------------
@@ -378,7 +381,7 @@ void TerrainNodeDistr::Construct() {
     ChVector<> center(0, 0, 2 * r);
 
     for (int il = 0; il < m_num_layers; il++) {
-        gen.createObjectsBox(utils::REGULAR_GRID, 2 * r, center, hdims);
+        gen.createObjectsBox(sampling_type, 2 * r, center, hdims);
         cout << m_terrain_rank << " level: " << il << " points: " << gen.getTotalNumBodies() << endl;
         center.z() += 2 * r;
     }
