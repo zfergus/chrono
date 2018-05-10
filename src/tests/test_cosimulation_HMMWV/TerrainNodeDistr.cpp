@@ -44,6 +44,11 @@ const std::string TerrainNodeDistr::m_checkpoint_filename = "checkpoint.dat";
 
 utils::SamplingType sampling_type = utils::POISSON_DISK;
 ////utils::SamplingType sampling_type = utils::REGULAR_GRID;
+////utils::SamplingType sampling_type = utils::HCP_PACK;
+
+
+unsigned int* foo = nullptr;
+
 
 // -----------------------------------------------------------------------------
 // Free functions in the cosim namespace
@@ -398,9 +403,36 @@ void TerrainNodeDistr::Construct() {
     //// TODO: remove this barrier
     MPI_Barrier(m_system->GetCommunicator());
 
+    // ------------------------------
+    // Write initial body information
+    // ------------------------------
+    char buf[10];
+    std::sprintf(buf, "%03d", m_system->GetCommRank());
+    std::string rank_str(buf);
+
+    std::ofstream outf(m_node_out_dir + "/init_" + rank_str + ".dat", std::ios::out);
+    outf.precision(7);
+    outf << std::scientific;
+
+    int i = -1;
+    for (auto body : m_system->Get_bodylist()) {
+        i++;
+        auto status = m_system->ddm->comm_status[i];
+        auto identifier = body->GetIdentifier();
+        auto local_id = body->GetId();
+        auto global_id = body->GetGid();
+        auto pos = body->GetPos();
+        outf << global_id << " " << local_id << " " << identifier << "   " << status << "   ";
+        outf << pos.x() << " " << pos.y() << " " << pos.z();
+        outf << std::endl;
+    }
+    outf.close();
+
     // --------------------------------------
     // Write file with terrain node settings
     // --------------------------------------
+
+    foo = &m_system->data_manager->shape_data.id_rigid[22];
 
     if (OnMaster()) {
         std::ofstream outf;
@@ -524,7 +556,9 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
 
             if (OnMaster()) {
                 cout << '\r' << std::fixed << std::setprecision(6) << m_system->GetChTime() << "  ["
-                    << m_timer.GetTimeSeconds() << "]" << std::flush;
+                     << m_timer.GetTimeSeconds() << "]" << std::flush;
+
+                //// TODO: This should be done on all ranks
 
                 // Output (if enabled)
                 if (m_settling_output && is % output_steps == 0) {

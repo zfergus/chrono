@@ -57,7 +57,7 @@ std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
 double time_settling = 1;
 
 // Terrain granular material parameters
-double particle_radius = 0.05;
+double particle_radius = 0.4;
 double particle_density = 2500;
 
 // Terrain container dimensions
@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
     int nthreads_terrain = 2;
     double sim_time = 10;
     double coh_pressure = 8e4;
-    double init_fwd_vel = 0;
+    double init_fwd_vel = 0; 
     double init_wheel_omega = 0;
     bool use_checkpoint = false;
     bool output = true;
@@ -292,7 +292,7 @@ int main(int argc, char** argv) {
             my_terrain->SetContactForceModel(ChSystemSMC::PlainCoulomb);
 
             my_terrain->SetProxyProperties(1, false);
-            my_terrain->SetGranularMaterial(particle_radius, particle_density, 6);
+            my_terrain->SetGranularMaterial(particle_radius, particle_density, 2);
             my_terrain->SetSettlingTime(time_settling);
             ////my_terrain->EnableSettlingOutput(true);
             my_terrain->Settle(use_checkpoint);
