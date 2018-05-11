@@ -22,9 +22,10 @@
 #include "chrono_parallel/collision/ChBroadphaseUtils.h"
 #include "chrono_parallel/collision/ChCollisionModelParallel.h"
 #include "chrono_parallel/collision/ChCollisionSystemParallel.h"
+#include "chrono_parallel/collision/ChCollision.h"
 
-using namespace chrono;
-using namespace collision;
+namespace chrono {
+namespace collision {
 
 ChCollisionSystemDistributed::ChCollisionSystemDistributed(ChParallelDataManager* dm, ChDistributedDataManager* ddm)
     : ChCollisionSystemParallel(dm) {
@@ -508,3 +509,24 @@ void ChCollisionSystemDistributed::Remove(ChCollisionModel* model) {
         GetLog() << "ERROR: curr not set correctly ChCollisionSystemDistributed::Remove()\n";
     }
 }
+
+void ChCollisionSystemDistributed::GetOverlappingAABB(custom_vector<char>& active_id, real3 Amin, real3 Amax) {
+    ddm->data_manager->aabb_generator->GenerateAABB();
+    ////#pragma omp parallel for
+    for (int i = 0; i < ddm->data_manager->shape_data.typ_rigid.size(); i++) {
+        auto id_rigid = ddm->data_manager->shape_data.id_rigid[i];
+        if (id_rigid == UINT_MAX)
+            continue;
+        real3 Bmin = ddm->data_manager->host_data.aabb_min[i];
+        real3 Bmax = ddm->data_manager->host_data.aabb_max[i];
+
+        bool inContact = (Amin.x <= Bmax.x && Bmin.x <= Amax.x) && (Amin.y <= Bmax.y && Bmin.y <= Amax.y) &&
+                         (Amin.z <= Bmax.z && Bmin.z <= Amax.z);
+        if (inContact) {
+            active_id[id_rigid] = true;
+        }
+    }
+}
+
+} /* namespace collision */
+} /* namespace chrono */
