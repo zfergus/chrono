@@ -46,8 +46,8 @@ using namespace chrono::vehicle;
 // =============================================================================
 
 // Cosimulation step size
-////double step_size = 4e-5;
-double step_size = 1e-3;
+double step_size = 4e-5;
+////double step_size = 1e-3;
 
 // Tire model
 ////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
@@ -57,8 +57,11 @@ std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
 double time_settling = 1;
 
 // Terrain granular material parameters
-double particle_radius = 0.4;
+double particle_radius = 0.01;
 double particle_density = 2500;
+
+// Number of layers
+int num_layers = 6;
 
 // Terrain container dimensions
 double container_length = 10;
@@ -66,7 +69,7 @@ double container_width = 3;
 double container_height = 1;
 
 // Output frequency (frames per second)
-double output_fps = 200;
+double output_fps = 100;
 
 // Checkpointing frequency (frames per second)
 double checkpoint_fps = 100;
@@ -292,7 +295,7 @@ int main(int argc, char** argv) {
             my_terrain->SetContactForceModel(ChSystemSMC::PlainCoulomb);
 
             my_terrain->SetProxyProperties(1, false);
-            my_terrain->SetGranularMaterial(particle_radius, particle_density, 2);
+            my_terrain->SetGranularMaterial(particle_radius, particle_density, num_layers);
             my_terrain->SetSettlingTime(time_settling);
             ////my_terrain->EnableSettlingOutput(true);
             my_terrain->Settle(use_checkpoint);

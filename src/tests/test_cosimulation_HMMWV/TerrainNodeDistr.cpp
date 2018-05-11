@@ -46,10 +46,6 @@ utils::SamplingType sampling_type = utils::POISSON_DISK;
 ////utils::SamplingType sampling_type = utils::REGULAR_GRID;
 ////utils::SamplingType sampling_type = utils::HCP_PACK;
 
-
-unsigned int* foo = nullptr;
-
-
 // -----------------------------------------------------------------------------
 // Free functions in the cosim namespace
 // -----------------------------------------------------------------------------
@@ -106,6 +102,7 @@ TerrainNodeDistr::TerrainNodeDistr(MPI_Comm terrain_comm, int num_tires, bool re
       m_render(render),
       m_constructed(false),
       m_settling_output(false),
+      m_initial_output(false),
       m_num_particles(0),
       m_particles_start_index(0) {
     MPI_Comm_rank(MPI_COMM_WORLD, &m_world_rank);
@@ -367,7 +364,6 @@ void TerrainNodeDistr::Construct() {
     //// TODO:  global or local index?
     m_particles_start_index = m_system->data_manager->num_rigid_bodies;
 
-    // Create particles
     // Create a particle generator and a mixture entirely made out of spheres
     utils::Generator gen(m_system);
     std::shared_ptr<utils::MixtureIngredient> m1 = gen.AddMixtureIngredient(utils::SPHERE, 1.0);
@@ -382,11 +378,13 @@ void TerrainNodeDistr::Construct() {
     MPI_Barrier(m_system->GetCommunicator());
 
     // Create particles in layers until reaching the desired number of particles
+    std::vector<unsigned int> num_particles(m_num_layers);
     ChVector<> hdims(m_hdimX - r, m_hdimY - r, 0);
     ChVector<> center(0, 0, 2 * r);
 
     for (int il = 0; il < m_num_layers; il++) {
         gen.createObjectsBox(sampling_type, 2 * r, center, hdims);
+        num_particles[il] = gen.getTotalNumBodies();
         cout << m_terrain_rank << " level: " << il << " points: " << gen.getTotalNumBodies() << endl;
         center.z() += 2 * r;
     }
@@ -400,39 +398,57 @@ void TerrainNodeDistr::Construct() {
 
     cout << m_prefix << " LocalRank: " << m_terrain_rank << " Local num. particles: " << m_system->GetNumBodies() << endl;
 
-    //// TODO: remove this barrier
-    MPI_Barrier(m_system->GetCommunicator());
+    // ------------------------------------------------
+    // Check number of particles generated on each rank
+    // ------------------------------------------------
+
+    std::vector<unsigned int> min_num_particles(m_num_particles);
+    std::vector<unsigned int> max_num_particles(m_num_particles);
+    MPI_Reduce(num_particles.data(), min_num_particles.data(), m_num_layers, MPI_UNSIGNED, MPI_MIN,
+               m_system->GetMasterRank(), m_system->GetCommunicator());
+    MPI_Reduce(num_particles.data(), max_num_particles.data(), m_num_layers, MPI_UNSIGNED, MPI_MAX,
+               m_system->GetMasterRank(), m_system->GetCommunicator());
+
+    if (OnMaster()) {
+        for (int il = 0; il < m_num_layers; il++) {
+            if (max_num_particles[il] != min_num_particles[il]) {
+                std::cout << "ERROR: particle generation, layer " << il << std::endl;
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+        }
+    }
 
     // ------------------------------
     // Write initial body information
     // ------------------------------
-    char buf[10];
-    std::sprintf(buf, "%03d", m_system->GetCommRank());
-    std::string rank_str(buf);
 
-    std::ofstream outf(m_node_out_dir + "/init_" + rank_str + ".dat", std::ios::out);
-    outf.precision(7);
-    outf << std::scientific;
+    if (m_initial_output) {
+        char buf[10];
+        std::sprintf(buf, "%03d", m_system->GetCommRank());
+        std::string rank_str(buf);
 
-    int i = -1;
-    for (auto body : m_system->Get_bodylist()) {
-        i++;
-        auto status = m_system->ddm->comm_status[i];
-        auto identifier = body->GetIdentifier();
-        auto local_id = body->GetId();
-        auto global_id = body->GetGid();
-        auto pos = body->GetPos();
-        outf << global_id << " " << local_id << " " << identifier << "   " << status << "   ";
-        outf << pos.x() << " " << pos.y() << " " << pos.z();
-        outf << std::endl;
+        std::ofstream outf(m_node_out_dir + "/init_" + rank_str + ".dat", std::ios::out);
+        outf.precision(7);
+        outf << std::scientific;
+
+        int i = -1;
+        for (auto body : m_system->Get_bodylist()) {
+            i++;
+            auto status = m_system->ddm->comm_status[i];
+            auto identifier = body->GetIdentifier();
+            auto local_id = body->GetId();
+            auto global_id = body->GetGid();
+            auto pos = body->GetPos();
+            outf << global_id << " " << local_id << " " << identifier << "   " << status << "   ";
+            outf << pos.x() << " " << pos.y() << " " << pos.z();
+            outf << std::endl;
+        }
+        outf.close();
     }
-    outf.close();
 
     // --------------------------------------
     // Write file with terrain node settings
     // --------------------------------------
-
-    foo = &m_system->data_manager->shape_data.id_rigid[22];
 
     if (OnMaster()) {
         std::ofstream outf;
@@ -440,8 +456,7 @@ void TerrainNodeDistr::Construct() {
         outf << "System settings" << endl;
         outf << "   Integration step size = " << m_step_size << endl;
         outf << "   Contact method = SMC" << endl;
-        outf << "   Use material properties? " << (m_system->GetSettings()->solver.use_material_properties ? "YES" : "NO")
-            << endl;
+        outf << "   Mat. props? " << (m_system->GetSettings()->solver.use_material_properties ? "YES" : "NO") << endl;
         outf << "   Collision envelope = " << m_system->GetSettings()->collision.collision_envelope << endl;
         outf << "Container dimensions" << endl;
         outf << "   X = " << 2 * m_hdimX << "  Y = " << 2 * m_hdimY << "  Z = " << 2 * m_hdimZ << endl;

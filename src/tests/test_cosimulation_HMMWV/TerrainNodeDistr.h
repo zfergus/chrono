@@ -104,6 +104,9 @@ class TerrainNodeDistr : public BaseNode {
     /// If enabled, output files are generated with a frequency of 100 FPS.
     void EnableSettlingOutput(bool val) { m_settling_output = val; }
 
+    /// Enable/disable output of initial particle information (default: false).
+    void EnableInitialOutput(bool val) { m_initial_output = val; }
+
     /// Enable rendering of the specified Bezier path.
     void SetPath(std::shared_ptr<chrono::ChBezierCurve> path);
 
@@ -175,6 +178,7 @@ class TerrainNodeDistr : public BaseNode {
 
     double m_time_settling;  ///< simulation length for settling of granular material
     bool m_settling_output;  ///< output files during settling?
+    bool m_initial_output;   ///< output initial particle information?
 
     int m_particles_start_index;       ///< start index for granular material bodies in system body list
 
