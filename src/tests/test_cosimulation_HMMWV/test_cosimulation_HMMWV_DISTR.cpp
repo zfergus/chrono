@@ -29,6 +29,7 @@
 
 #include "chrono/core/ChFileutils.h"
 #include "chrono_vehicle/ChVehicleModelData.h"
+#include "chrono_vehicle/utils/ChVehiclePath.h"
 
 #include "chrono_thirdparty/SimpleOpt/SimpleOpt.h"
 
@@ -63,10 +64,13 @@ double particle_density = 2500;
 // Number of layers
 int num_layers = 6;
 
-// Terrain container dimensions
-double container_length = 10;
-double container_width = 3;
-double container_height = 1;
+// Driver type
+//   DATA_DRIVER:  throttle, steering, and braking inputs provided at time points
+//   DEFAULT_DRIVER: zero vehicle inputs (vehicle dropped on granular terrain)
+//   PATH_DRIVER: path follower with (constant target speed)
+VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
+////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
+////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
 
 // Output frequency (frames per second)
 double output_fps = 100;
@@ -191,13 +195,30 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Driver type
-    VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
-    ////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
-    ////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
-
-    // Terrain dimensions
+    // Terrain dimensions (appropriate for specified driver mode)
+    double container_length;
+    double container_width;
+    double container_height;
     std::shared_ptr<ChBezierCurve> path;
+
+    switch (driver_type) {
+        case VehicleNode::DEFAULT_DRIVER:
+            container_length = 10;
+            container_width = 3;
+            container_height = 1;
+            break;
+        case VehicleNode::DATA_DRIVER:
+            container_length = 10;
+            container_width = 3;
+            container_height = 1;
+            break;
+        case VehicleNode::PATH_DRIVER:
+            container_length = 10;
+            container_width = 6;
+            container_height = 1;
+            path = DoubleLaneChangePath(ChVector<>(0, -1.5, 0), 20, 3, 20, 50, true);
+            break;
+    }
 
     // Create the systems and run the settling phase for terrain.
     VehicleNode* my_vehicle = nullptr;
@@ -232,10 +253,10 @@ int main(int argc, char** argv) {
                     cout << my_vehicle->GetPrefix() << " Acceleration test." << endl;
                     break;
                 }
-                case VehicleNode::PATH_DRIVER: {
-                    double target_speed = 10.0;
+                case VehicleNode::PATH_DRIVER: {               
+                    double target_speed = 15.0;
                     my_vehicle->SetPathDriver(path, target_speed);
-                    cout << my_vehicle->GetPrefix() << " Constant radius turn test.  V = " << target_speed << endl;
+                    cout << my_vehicle->GetPrefix() << " Path following.  V = " << target_speed << endl;
                     break;
                 }
             }
