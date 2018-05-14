@@ -889,6 +889,7 @@ int ChCommDistributed::PackShapes(std::vector<Shape>* buf, int index) {
                 shape.data[3] = shape_data.triangle_rigid[start + 2].x;
                 shape.data[4] = shape_data.triangle_rigid[start + 2].y;
                 shape.data[5] = shape_data.triangle_rigid[start + 2].z;
+				break;
             case chrono::collision::ELLIPSOID:
                 // Pack B
                 shape.data[0] = shape_data.box_like_rigid[start].x;
