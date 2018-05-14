@@ -167,8 +167,9 @@ class TerrainNodeDistr : public BaseNode {
 
     std::shared_ptr<chrono::ChBoundary> m_boundary;  ///< custom collision for container
 
-    bool m_fixed_proxies;  ///< flag indicating whether or not proxy bodies are fixed to ground
-    double m_mass_pF;      ///< mass of a triangular proxy body
+    bool m_fixed_proxies;                 ///< flag indicating whether or not proxy bodies are fixed to ground
+    double m_mass_pF;                     ///< mass of a triangular proxy body
+    chrono::ChVector<> m_init_proxy_loc;  ///< initial locatino for all proxy bodies
 
     int m_Id_g;                    ///< first identifier for granular material bodies
     int m_num_layers;              ///< number of generated particle layers

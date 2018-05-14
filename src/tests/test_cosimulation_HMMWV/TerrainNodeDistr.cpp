@@ -21,8 +21,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
 #include <set>
+#include <vector>
 
 #include "chrono/ChConfig.h"
 #include "chrono/assets/ChLineShape.h"
@@ -310,6 +310,17 @@ void TerrainNodeDistr::Construct() {
         cout << m_prefix << " broad-phase bins: " << binsX << " x " << binsY << " x " << binsZ << endl;
     }
 
+    // Initial location for proxy bodies: subdomain center on master
+    double loc[3];
+    if (OnMaster()) {
+        ChVector<> center = (sub_hi + sub_lo) / 2;
+        loc[0] = center.x();
+        loc[1] = center.y();
+        loc[2] = center.z();
+    }
+    MPI_Bcast(loc, 3, MPI_DOUBLE, m_system->GetMasterRank(), m_system->GetCommunicator());
+    m_init_proxy_loc = ChVector<>(loc[0], loc[1], loc[2]);
+
     // ----------------------------------------------------
     // Create the container body and the collision boundary
     // ----------------------------------------------------
@@ -396,7 +407,8 @@ void TerrainNodeDistr::Construct() {
         cout << m_prefix << " Generated particles:  " << m_num_particles << endl;
     }
 
-    cout << m_prefix << " LocalRank: " << m_terrain_rank << " Local num. particles: " << m_system->GetNumBodies() << endl;
+    cout << m_prefix << " LocalRank: " << m_terrain_rank << " Local num. particles: " << m_system->GetNumBodies()
+         << endl;
 
     // ------------------------------------------------
     // Check number of particles generated on each rank
@@ -497,7 +509,6 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
     Construct();
 
     if (use_checkpoint) {
-
         ////
         //// TODO: what can we do about checkpointing w/ Chrono::Distributed?
         ////
@@ -737,6 +748,7 @@ void TerrainNodeDistr::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSu
         body->SetIdentifier(m_tire_data[which].m_start_tri + it);
         body->SetMass(m_mass_pF);
         body->SetInertiaXX(inertia_pF);
+        body->SetPos(m_init_proxy_loc);
         body->SetBodyFixed(m_fixed_proxies);
         body->SetMaterialSurface(material);
 
@@ -781,7 +793,8 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
         double* vert_data = new double[2 * 3 * num_vert];
 
         if (OnMaster()) {
-            MPI_Recv(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD, &status);
+            MPI_Recv(vert_data, 2 * 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), step_number, MPI_COMM_WORLD,
+                     &status);
         }
 
         // Brodcast to intra-communicator
