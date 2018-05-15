@@ -240,7 +240,7 @@ void TireNode::Initialize() {
         cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
 
     // Mesh connectivity
-    std::vector<ChVector<>> vert_pos;  // ignored here
+    std::vector<ChVector<>> vert_pos;
     std::vector<ChVector<>> vert_vel;  // ignored here
     std::vector<ChVector<int>> triangles;
     m_tire_wrapper->GetMeshState(vert_pos, vert_vel, triangles);
@@ -254,6 +254,17 @@ void TireNode::Initialize() {
     }
     MPI_Send(tri_data, 3 * num_tri, MPI_INT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
     delete[] tri_data;
+
+    // Vertex locations
+    unsigned int num_vert = (unsigned int)vert_pos.size();
+    double* vert_data = new double[3 * num_vert];
+    for (unsigned int iv = 0; iv < num_vert; iv++) {
+        vert_data[3 * iv + 0] = vert_pos[iv].x();
+        vert_data[3 * iv + 1] = vert_pos[iv].y();
+        vert_data[3 * iv + 2] = vert_pos[iv].z();
+    }
+    MPI_Send(vert_data, 3 * num_vert, MPI_DOUBLE, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
+    delete[] vert_data;
 
     // Material properties
     MPI_Send(mat_props.data(), 8, MPI_FLOAT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);

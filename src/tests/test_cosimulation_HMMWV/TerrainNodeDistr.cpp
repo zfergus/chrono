@@ -310,17 +310,6 @@ void TerrainNodeDistr::Construct() {
         cout << m_prefix << " broad-phase bins: " << binsX << " x " << binsY << " x " << binsZ << endl;
     }
 
-    // Initial location for proxy bodies: subdomain center on master
-    double loc[3];
-    if (OnMaster()) {
-        ChVector<> center = (sub_hi + sub_lo) / 2;
-        loc[0] = center.x();
-        loc[1] = center.y();
-        loc[2] = center.z();
-    }
-    MPI_Bcast(loc, 3, MPI_DOUBLE, m_system->GetMasterRank(), m_system->GetCommunicator());
-    m_init_proxy_loc = ChVector<>(loc[0], loc[1], loc[2]);
-
     // ----------------------------------------------------
     // Create the container body and the collision boundary
     // ----------------------------------------------------
@@ -439,7 +428,7 @@ void TerrainNodeDistr::Construct() {
         std::sprintf(buf, "%03d", m_system->GetCommRank());
         std::string rank_str(buf);
 
-        std::ofstream outf(m_node_out_dir + "/init_" + rank_str + ".dat", std::ios::out);
+        std::ofstream outf(m_node_out_dir + "/init_particles_" + rank_str + ".dat", std::ios::out);
         outf.precision(7);
         outf << std::scientific;
 
@@ -629,7 +618,9 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
 void TerrainNodeDistr::Initialize() {
     Construct();
 
+    // ----------------------------------
     // Find "height" of granular material
+    // ----------------------------------
 
     ////
     //// TODO: clean up this ChsystemDistributed function
@@ -643,7 +634,10 @@ void TerrainNodeDistr::Initialize() {
     // Reset system time
     m_system->SetChTime(0);
 
+    // ---------------------------------------------
     // Send information for initial vehicle position
+    // ---------------------------------------------
+
     if (OnMaster()) {
         double init_dim[2] = {init_height, m_hdimX};
         MPI_Send(init_dim, 2, MPI_DOUBLE, VEHICLE_NODE_RANK, 0, MPI_COMM_WORLD);
@@ -660,7 +654,10 @@ void TerrainNodeDistr::Initialize() {
     }
 #endif
 
-    // Loop over all tires, receive information, create proxies.
+    // --------------------------------------------------------
+    // Loop over all tires, receive information, create proxies
+    // --------------------------------------------------------
+
     unsigned int start_tri_index = 0;
 
     for (int which = 0; which < m_num_tires; which++) {
@@ -707,6 +704,25 @@ void TerrainNodeDistr::Initialize() {
 
         delete[] tri_data;
 
+        // Receive vertex locations.
+        unsigned int num_vert = m_tire_data[which].m_num_vert;
+        double* vert_data = new double[3 * num_vert];
+
+        if (OnMaster()) {
+            MPI_Status status_v;
+            MPI_Recv(vert_data, 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_v);
+        }
+
+        // Broadcast to intra-communicator
+        MPI_Bcast(vert_data, 3 * num_vert, MPI_DOUBLE, m_system->GetMasterRank(), m_system->GetCommunicator());
+
+        for (unsigned int iv = 0; iv < num_vert; iv++) {
+            m_tire_data[which].m_vertex_pos[iv] =
+                ChVector<>(vert_data[3 * iv + 0], vert_data[3 * iv + 1], vert_data[3 * iv + 2]);
+        }
+
+        delete[] vert_data;
+
         // Receive tire contact material properties.
         float mat_props[8];
 
@@ -732,6 +748,34 @@ void TerrainNodeDistr::Initialize() {
         // Create proxy bodies. Represent the tire as triangles associated with mesh faces.
         CreateFaceProxies(which, mat_tire);
     }
+
+    // ------------------------------
+    // Write initial body information
+    // ------------------------------
+
+    if (m_initial_output) {
+        char buf[10];
+        std::sprintf(buf, "%03d", m_system->GetCommRank());
+        std::string rank_str(buf);
+
+        std::ofstream outf(m_node_out_dir + "/init_bodies_" + rank_str + ".dat", std::ios::out);
+        outf.precision(7);
+        outf << std::scientific;
+
+        int i = -1;
+        for (auto body : m_system->Get_bodylist()) {
+            i++;
+            auto status = m_system->ddm->comm_status[i];
+            auto identifier = body->GetIdentifier();
+            auto local_id = body->GetId();
+            auto global_id = body->GetGid();
+            auto pos = body->GetPos();
+            outf << global_id << " " << local_id << " " << identifier << "   " << status << "   ";
+            outf << pos.x() << " " << pos.y() << " " << pos.z();
+            outf << std::endl;
+        }
+        outf.close();
+    }
 }
 
 // Create bodies with triangular contact geometry as proxies for the tire mesh faces.
@@ -740,25 +784,33 @@ void TerrainNodeDistr::Initialize() {
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
 void TerrainNodeDistr::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSurfaceSMC> material) {
+    TireData& tire_data = m_tire_data[which];
+
     //// TODO:  better approximation of mass / inertia?
     ChVector<> inertia_pF = 1e-3 * m_mass_pF * ChVector<>(0.1, 0.1, 0.1);
 
-    for (unsigned int it = 0; it < m_tire_data[which].m_num_tri; it++) {
+    for (unsigned int it = 0; it < tire_data.m_num_tri; it++) {
         auto body = std::shared_ptr<ChBody>(m_system->NewBody());
-        body->SetIdentifier(m_tire_data[which].m_start_tri + it);
+        body->SetIdentifier(tire_data.m_start_tri + it);
         body->SetMass(m_mass_pF);
         body->SetInertiaXX(inertia_pF);
-        body->SetPos(m_init_proxy_loc);
         body->SetBodyFixed(m_fixed_proxies);
         body->SetMaterialSurface(material);
 
+        // Determine initial position and contact shape
+        const ChVector<int>& tri = tire_data.m_triangles[it];
+        const ChVector<>& pA = tire_data.m_vertex_pos[tri[0]];
+        const ChVector<>& pB = tire_data.m_vertex_pos[tri[1]];
+        const ChVector<>& pC = tire_data.m_vertex_pos[tri[2]];
+        ChVector<> pos = (pA + pB + pC) / 3;
+        body->SetPos(pos);
+
         // Create contact shape.
         // Note that the vertex locations will be updated at every synchronization time.
-        std::string name = "tri_" + std::to_string(m_tire_data[which].m_start_tri + it);
-        double len = 0.1;
+        std::string name = "tri_" + std::to_string(tire_data.m_start_tri + it);
 
         body->GetCollisionModel()->ClearModel();
-        utils::AddTriangle(body.get(), ChVector<>(len, 0, 0), ChVector<>(0, len, 0), ChVector<>(0, 0, len), name);
+        utils::AddTriangle(body.get(), pA - pos, pB - pos, pC - pos, name);
         body->GetCollisionModel()->SetFamily(1);
         body->GetCollisionModel()->SetFamilyMaskNoCollisionWithFamily(1);
         body->GetCollisionModel()->BuildModel();
@@ -770,8 +822,8 @@ void TerrainNodeDistr::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSu
         m_system->AddBody(body);
 
         // Update map global ID -> triangle index
-        m_tire_data[which].m_gids[it] = body->GetGid();
-        m_tire_data[which].m_map[body->GetGid()] = it;
+        tire_data.m_gids[it] = body->GetGid();
+        tire_data.m_map[body->GetGid()] = it;
     }
 }
 
@@ -874,13 +926,13 @@ void TerrainNodeDistr::UpdateFaceProxies(int which) {
         const ChVector<int>& tri = tire_data.m_triangles[it];
 
         // Vertex locations and velocities (expressed in global frame)
-        const ChVector<>& pA = m_tire_data[which].m_vertex_pos[tri[0]];
-        const ChVector<>& pB = m_tire_data[which].m_vertex_pos[tri[1]];
-        const ChVector<>& pC = m_tire_data[which].m_vertex_pos[tri[2]];
+        const ChVector<>& pA = tire_data.m_vertex_pos[tri[0]];
+        const ChVector<>& pB = tire_data.m_vertex_pos[tri[1]];
+        const ChVector<>& pC = tire_data.m_vertex_pos[tri[2]];
 
-        const ChVector<>& vA = m_tire_data[which].m_vertex_vel[tri[0]];
-        const ChVector<>& vB = m_tire_data[which].m_vertex_vel[tri[1]];
-        const ChVector<>& vC = m_tire_data[which].m_vertex_vel[tri[2]];
+        const ChVector<>& vA = tire_data.m_vertex_vel[tri[0]];
+        const ChVector<>& vB = tire_data.m_vertex_vel[tri[1]];
+        const ChVector<>& vC = tire_data.m_vertex_vel[tri[2]];
 
         // Position and orientation of proxy body (at triangle barycenter)
         ChVector<> pos = (pA + pB + pC) / 3;

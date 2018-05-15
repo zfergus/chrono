@@ -674,6 +674,23 @@ void TerrainNode::Initialize() {
 
         delete[] tri_data;
 
+        // Receive vertex locations.
+        unsigned int num_vert = m_tire_data[which].m_num_vert;
+        double* vert_data = new double[3 * num_vert];
+
+        MPI_Status status_v;
+        MPI_Recv(vert_data, 3 * num_vert, MPI_DOUBLE, TIRE_NODE_RANK(which), 0, MPI_COMM_WORLD, &status_v);
+
+        for (unsigned int iv = 0; iv < num_vert; iv++) {
+            m_tire_data[which].m_vertex_states[iv].pos =
+                ChVector<>(vert_data[3 * iv + 0], vert_data[3 * iv + 1], vert_data[3 * iv + 2]);
+        }
+
+        delete[] vert_data;
+
+        //// TODO: Currently, these initial vertex locations are ignored.
+        ////       They will be received again at first synchronization.
+
         // Receive tire contact material properties.
         float mat_props[8];
 

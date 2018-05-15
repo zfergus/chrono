@@ -104,7 +104,9 @@ class TerrainNodeDistr : public BaseNode {
     /// If enabled, output files are generated with a frequency of 100 FPS.
     void EnableSettlingOutput(bool val) { m_settling_output = val; }
 
-    /// Enable/disable output of initial particle information (default: false).
+    /// Enable/disable output of initial body information (default: false).
+    /// Output includes body information after granular material creation (files init_particles_xxx.dat)
+    /// and body information after proxy creation (files init_bodies_xxx.dat) on all terrain ranks.
     void EnableInitialOutput(bool val) { m_initial_output = val; }
 
     /// Enable rendering of the specified Bezier path.
@@ -138,7 +140,7 @@ class TerrainNodeDistr : public BaseNode {
     void WriteCheckpoint();
 
   private:
-    ///
+    /// Data for tire representation through proxy bodies.
     struct TireData {
         std::vector<uint> m_gids;                        ///< global indices of proxy bodies
         std::vector<chrono::ChVector<>> m_vertex_pos;    ///< mesh vertex positions
@@ -167,9 +169,8 @@ class TerrainNodeDistr : public BaseNode {
 
     std::shared_ptr<chrono::ChBoundary> m_boundary;  ///< custom collision for container
 
-    bool m_fixed_proxies;                 ///< flag indicating whether or not proxy bodies are fixed to ground
-    double m_mass_pF;                     ///< mass of a triangular proxy body
-    chrono::ChVector<> m_init_proxy_loc;  ///< initial locatino for all proxy bodies
+    bool m_fixed_proxies;  ///< flag indicating whether or not proxy bodies are fixed to ground
+    double m_mass_pF;      ///< mass of a triangular proxy body
 
     int m_Id_g;                    ///< first identifier for granular material bodies
     int m_num_layers;              ///< number of generated particle layers
