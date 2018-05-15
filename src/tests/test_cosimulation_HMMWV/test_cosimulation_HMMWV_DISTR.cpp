@@ -52,7 +52,8 @@ double step_size = 4e-5;
 
 // Tire model
 ////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
-std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
+std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
 
 // Terrain settling time
 double time_settling = 1;
@@ -71,6 +72,12 @@ int num_layers = 6;
 VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
 ////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
 ////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
+
+// Output initial body information
+bool initial_output = false;
+
+// Output during settling phase
+bool settling_output = false;
 
 // Output frequency (frames per second)
 double output_fps = 100;
@@ -315,10 +322,12 @@ int main(int argc, char** argv) {
             my_terrain->UseMaterialProperties(false);
             my_terrain->SetContactForceModel(ChSystemSMC::PlainCoulomb);
 
+            my_terrain->EnableInitialOutput(initial_output);
+            my_terrain->EnableSettlingOutput(settling_output);
+
             my_terrain->SetProxyProperties(1, false);
             my_terrain->SetGranularMaterial(particle_radius, particle_density, num_layers);
             my_terrain->SetSettlingTime(time_settling);
-            ////my_terrain->EnableSettlingOutput(true);
             my_terrain->Settle(use_checkpoint);
 
             my_terrain->SetPath(path);
