@@ -22,15 +22,15 @@
 #ifndef HMMWV_COSIM_TERRAINNODEDISTR_H
 #define HMMWV_COSIM_TERRAINNODEDISTR_H
 
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 #include "chrono/utils/ChUtilsCreators.h"
 #include "chrono/utils/ChUtilsGenerators.h"
 #include "chrono/utils/ChUtilsInputOutput.h"
 
-#include "chrono_distributed/physics/ChSystemDistributed.h"
 #include "chrono_distributed/collision/ChBoundary.h"
+#include "chrono_distributed/physics/ChSystemDistributed.h"
 
 #include "BaseNode.h"
 
@@ -38,16 +38,16 @@
 
 namespace cosim {
 
-    /// Initialize the co-simulation framework.
-    /// MUST be called on all ranks.
-    /// Returns MPI_SUCCESS if successful and MPI_ERR_OTHER if there are not enough ranks.
-    int Initialize(int num_tires);
+/// Initialize the co-simulation framework.
+/// MUST be called on all ranks.
+/// Returns MPI_SUCCESS if successful and MPI_ERR_OTHER if there are not enough ranks.
+int Initialize(int num_tires);
 
-    /// Return true if the co-simulation framework was initialized and false otherwise.
-    bool IsInitialized();
+/// Return true if the co-simulation framework was initialized and false otherwise.
+bool IsInitialized();
 
-    /// Return the MPI communicator for distributed terrain simulation.
-    MPI_Comm GetTerrainIntracommunicator();
+/// Return the MPI communicator for distributed terrain simulation.
+MPI_Comm GetTerrainIntracommunicator();
 
 };  // namespace cosim
 
@@ -78,12 +78,12 @@ class TerrainNodeDistr : public BaseNode {
     void SetGranularMaterial(double radius,   ///< particle radius (default: 0.01)
                              double density,  ///< particle material density (default: 2000)
                              int num_layers   ///< number of generated particle layers (default: 5)
-                             );
+    );
 
     /// Set properties of proxy bodies.
     void SetProxyProperties(double mass,  ///< mass of a proxy body (default: 1)
                             bool fixed    ///< proxies fixed to ground? (default: false)
-                            );
+    );
 
     /// Set the material properties for terrain.
     /// These parameters characterize the material for the container and the granular material.
@@ -139,6 +139,8 @@ class TerrainNodeDistr : public BaseNode {
     /// Write checkpointing file.
     void WriteCheckpoint();
 
+    void DumpTireMesh();
+
   private:
     /// Data for tire representation through proxy bodies.
     struct TireData {
@@ -163,9 +165,9 @@ class TerrainNodeDistr : public BaseNode {
     int m_num_tires;                    ///< number of vehicle tires
     std::vector<TireData> m_tire_data;  ///< data for the vehicle tire proxies
 
-    double m_hdimX;    ///< container half-length (X direction)
-    double m_hdimY;    ///< container half-width (Y direction)
-    double m_hdimZ;    ///< container half-height (Z direction)
+    double m_hdimX;  ///< container half-length (X direction)
+    double m_hdimY;  ///< container half-width (Y direction)
+    double m_hdimZ;  ///< container half-height (Z direction)
 
     std::shared_ptr<chrono::ChBoundary> m_boundary;  ///< custom collision for container
 
@@ -182,7 +184,7 @@ class TerrainNodeDistr : public BaseNode {
     bool m_settling_output;  ///< output files during settling?
     bool m_initial_output;   ///< output initial particle information?
 
-    int m_particles_start_index;       ///< start index for granular material bodies in system body list
+    int m_particles_start_index;  ///< start index for granular material bodies in system body list
 
     std::shared_ptr<chrono::ChBezierCurve> m_path;  ///< path for closed-loop driver (for rendering only, may be empty)
 

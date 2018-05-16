@@ -909,6 +909,29 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
         cout << m_prefix << msg << endl;
 }
 
+void TerrainNodeDistr::DumpTireMesh() {
+    if (!OnMaster())
+        return;
+
+    TireData& tire_data = m_tire_data[0];
+
+    std::ofstream outv(m_node_out_dir + "/vertices.dat", std::ios::out);
+    outv.precision(7);
+    outv << std::scientific;
+    for (auto v : tire_data.m_vertex_pos) {
+        outv << v.x() << " " << v.y() << " " << v.z() << std::endl;
+    }
+    std::cout << "WROTE vertices: " << tire_data.m_vertex_pos.size() << std::endl;
+
+    std::ofstream outt(m_node_out_dir + "/triangles.dat", std::ios::out);
+    outt.precision(7);
+    outt << std::scientific;
+    for (auto tri : tire_data.m_triangles) {
+        outt << tri.x() << " " << tri.y() << " " << tri.z() << std::endl;
+    }
+    std::cout << "WROTE triangles: " << tire_data.m_triangles.size() << std::endl;
+}
+
 // Set position, orientation, and velocity of proxy bodies based on tire mesh faces.
 // The proxy body is effectively reconstructed at each synchronization time:
 //    - position at the center of mass of the three vertices
