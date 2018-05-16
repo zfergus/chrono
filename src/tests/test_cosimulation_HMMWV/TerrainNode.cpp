@@ -776,6 +776,8 @@ void TerrainNode::CreateNodeProxies(int which, std::shared_ptr<ChMaterialSurface
 // Add all proxy bodies to the same collision family and disable collision between any
 // two members of this family.
 void TerrainNode::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSurface> material) {
+    TireData& tire_data = m_tire_data[which];
+
     //// TODO:  better approximation of mass / inertia?
     ChVector<> inertia_pF = 1e-3 * m_mass_pF * ChVector<>(0.1, 0.1, 0.1);
 
@@ -783,19 +785,25 @@ void TerrainNode::CreateFaceProxies(int which, std::shared_ptr<ChMaterialSurface
         auto body = std::shared_ptr<ChBody>(m_system->NewBody());
         body->SetIdentifier(m_tire_data[which].m_start_tri + it);
         body->SetMass(m_mass_pF);
-
         body->SetInertiaXX(inertia_pF);
         body->SetBodyFixed(m_fixed_proxies);
         body->SetCollide(true);
         body->SetMaterialSurface(material);
 
+        // Determine initial position and contact shape
+        Triangle& tri = tire_data.m_triangles[it];
+        const ChVector<>& pA = tire_data.m_vertex_states[tri.v1].pos;
+        const ChVector<>& pB = tire_data.m_vertex_states[tri.v2].pos;
+        const ChVector<>& pC = tire_data.m_vertex_states[tri.v3].pos;
+        ChVector<> pos = (pA + pB + pC) / 3;
+        body->SetPos(pos);
+
         // Create contact shape.
         // Note that the vertex locations will be updated at every synchronization time.
         std::string name = "tri_" + std::to_string(m_tire_data[which].m_start_tri + it);
-        double len = 0.1;
 
         body->GetCollisionModel()->ClearModel();
-        utils::AddTriangle(body.get(), ChVector<>(len, 0, 0), ChVector<>(0, len, 0), ChVector<>(0, 0, len), name);
+        utils::AddTriangle(body.get(), pA - pos, pB - pos, pC - pos, name);
         body->GetCollisionModel()->SetFamily(1);
         body->GetCollisionModel()->SetFamilyMaskNoCollisionWithFamily(1);
         body->GetCollisionModel()->BuildModel();

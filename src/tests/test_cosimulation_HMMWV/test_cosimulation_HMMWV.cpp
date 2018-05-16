@@ -49,6 +49,31 @@ using namespace chrono::vehicle;
 // Cosimulation step size
 double step_size = 4e-5;
 
+std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
+
+// Terrain settling time
+double time_settling = 0.2;
+
+// Terrain granular material parameters
+double particle_radius = 0.006;
+double particle_density = 2500;
+
+// Number of layers
+int num_layers = 6;
+
+// Driver type
+//   DATA_DRIVER:  throttle, steering, and braking inputs provided at time points
+//   DEFAULT_DRIVER: zero vehicle inputs (vehicle dropped on granular terrain)
+//   PATH_DRIVER: path follower with (constant target speed)
+VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
+////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
+////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
+
+// Output during settling phase
+bool settling_output = false;
+
 // Output frequency (frames per second)
 double output_fps = 200;
 
@@ -173,11 +198,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Driver type
-    VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
-    ////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
-    ////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
-
     // Terrain dimensions
     double container_length;
     double container_width;
@@ -270,8 +290,7 @@ int main(int argc, char** argv) {
             my_terrain->SetContainerDimensions(container_length, container_width, container_height, 0.2);
             my_terrain->SetPlatformLength(platform_length);
 
-            double radius = 0.006;
-            float coh_force = static_cast<float>(CH_C_PI * radius * radius * coh_pressure);
+            float coh_force = static_cast<float>(CH_C_PI * particle_radius * particle_radius * coh_pressure);
 
             switch (method) {
                 case ChMaterialSurface::SMC: {
@@ -305,10 +324,10 @@ int main(int argc, char** argv) {
                     my_terrain->SetProxyProperties(1, 0.01, false);
                     break;
                 case TerrainNode::GRANULAR:
+                    my_terrain->EnableSettlingOutput(settling_output);
                     my_terrain->SetProxyProperties(1, false);
-                    my_terrain->SetGranularMaterial(radius, 2500, 6);
-                    my_terrain->SetSettlingTime(0.2);
-                    ////my_terrain->EnableSettlingOutput(true);
+                    my_terrain->SetGranularMaterial(particle_radius, particle_density, num_layers);
+                    my_terrain->SetSettlingTime(time_settling);
                     my_terrain->Settle();
                     break;
             }
@@ -324,8 +343,7 @@ int main(int argc, char** argv) {
         case TIRE_NODE_RANK(2):
         case TIRE_NODE_RANK(3): {
             int wheel_id = rank - 2;
-            my_tire =
-                new TireNode(vehicle::GetDataFile("hmmwv/tire/HMMWV_ANCFTire.json"), WheelID(wheel_id), nthreads_tire);
+            my_tire = new TireNode(vehicle::GetDataFile(tire_filename), WheelID(wheel_id), nthreads_tire);
             my_tire->SetStepSize(step_size);
             my_tire->SetOutDir(out_dir, suffix);
             cout << my_tire->GetPrefix() << " rank = " << rank << " running on: " << procname << endl;
