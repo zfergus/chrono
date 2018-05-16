@@ -257,6 +257,7 @@ void TerrainNodeDistr::SetGranularMaterial(double radius, double density, int nu
     m_rho_g = density;
     m_num_layers = num_layers;
     m_system->GetSettings()->collision.collision_envelope = 0.1 * radius;
+    m_system->SetGhostLayer(2 * radius);
 }
 
 void TerrainNodeDistr::UseMaterialProperties(bool flag) {

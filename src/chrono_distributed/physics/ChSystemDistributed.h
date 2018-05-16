@@ -68,6 +68,9 @@ class CH_DISTR_API ChSystemDistributed : public ChSystemParallelSMC {
     /// Return true if the calling process is the one marked as 'master'.
     bool OnMaster() const { return my_rank == master_rank; }
 
+    /// Set the distance into the neighboring sub-domain that is considered shared.
+    void SetGhostLayer(double ghostlayer) { ghost_layer = ghostlayer; }
+
     /// Return the distance into the neighboring sub-domain that is considered shared.
     double GetGhostLayer() const { return ghost_layer; }
 
