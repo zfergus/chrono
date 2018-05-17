@@ -139,7 +139,8 @@ class TerrainNodeDistr : public BaseNode {
     /// Write checkpointing file.
     void WriteCheckpoint();
 
-    void DumpTireMesh();
+    /// Write debugging proxy information for the specified tire after synchronization.
+    void DumpProxyData(int which) const;
 
   private:
     /// Data for tire representation through proxy bodies.
