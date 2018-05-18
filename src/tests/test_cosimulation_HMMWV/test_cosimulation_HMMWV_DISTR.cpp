@@ -47,19 +47,19 @@ using namespace chrono::vehicle;
 // =============================================================================
 
 // Cosimulation step size
-double step_size = 4e-5;
+double step_size = 5e-5;
 ////double step_size = 1e-3;
 
 // Tire model
 ////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
-std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
+std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
 
 // Terrain settling time
 double time_settling = 1;
 
 // Terrain granular material parameters
-double particle_radius = 0.01;
+double particle_radius = 0.08;
 double particle_density = 2500;
 
 // Number of layers
@@ -172,9 +172,9 @@ int main(int argc, char** argv) {
     // Parse command line arguments
     int nthreads_tire = 2;
     int nthreads_terrain = 2;
-    double sim_time = 10;
+    double sim_time = 5;
     double coh_pressure = 8e4;
-    double init_fwd_vel = 0; 
+    double init_fwd_vel = 0;
     double init_wheel_omega = 0;
     bool use_checkpoint = false;
     bool output = true;
@@ -260,7 +260,7 @@ int main(int argc, char** argv) {
                     cout << my_vehicle->GetPrefix() << " Acceleration test." << endl;
                     break;
                 }
-                case VehicleNode::PATH_DRIVER: {               
+                case VehicleNode::PATH_DRIVER: {
                     double target_speed = 15.0;
                     my_vehicle->SetPathDriver(path, target_speed);
                     cout << my_vehicle->GetPrefix() << " Path following.  V = " << target_speed << endl;

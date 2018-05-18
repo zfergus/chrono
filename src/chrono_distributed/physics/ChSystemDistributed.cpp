@@ -569,6 +569,86 @@ void ChSystemDistributed::SetTriangleShape(uint gid, int shape_idx, const TriDat
 }
 
 // TODO: only return for bodies with nonzero contact force
+// std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(
+//     const std::vector<uint>& gids) const {
+//     // Gather forces on specified bodies
+//     std::vector<internal_force> send;
+//     for (uint i = 0; i < gids.size(); i++) {
+//         uint gid = gids[i];
+//         int local = ddm->GetLocalIndex(gid);
+//         if (local != -1 &&
+//             (ddm->comm_status[local] == distributed::OWNED || ddm->comm_status[local] == distributed::SHARED_UP ||
+//              ddm->comm_status[local] == distributed::SHARED_DOWN)) {
+//             // Get force on body at index local
+//             int contact_index = data_manager->host_data.ct_body_map[local];
+//             if (contact_index != -1) {
+//                 real3 f = data_manager->host_data.ct_body_force[contact_index];
+//                 internal_force cf = {gid, {f[0], f[1], f[2]}};
+//                 send.push_back(std::move(cf));
+//             }
+//         }
+//     }
+//
+//     // Master rank receives all messages sent to it and appends the values to its gid vector
+//     MPI_Request r_bar;
+//     MPI_Status s_bar;
+//     internal_force* buffer = new internal_force[gids.size()];  // Beginning of buffer
+//     internal_force* buf = buffer;                              // Moving pointer into buffer
+//     int num_gids = 0;
+//     if (my_rank == master_rank) {
+//         // Write own values
+//         if (send.size() > 0) {
+//             std::memcpy(buf, send.data(), sizeof(internal_force) * send.size());
+//             buf += send.size();
+//             num_gids += send.size();
+//         }
+//         MPI_Ibarrier(world, &r_bar);
+//         MPI_Status s_prob;
+//         int message_waiting = 0;
+//         int r_bar_flag = 0;
+//
+//         MPI_Test(&r_bar, &r_bar_flag, &s_bar);
+//         while (!r_bar_flag) {
+//             MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, world, &message_waiting, &s_prob);
+//             if (message_waiting) {
+//                 int count;
+//                 MPI_Get_count(&s_prob, InternalForceType, &count);
+//                 std::cout << "COUNT A: " << count << "\n";
+//                 MPI_Request r_recv;
+//                 MPI_Irecv(buf, count, InternalForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
+//                 buf += count;
+//                 num_gids += count;
+//             }
+//             MPI_Test(&r_bar, &r_bar_flag, &s_bar);
+//         }
+//     } else {
+//         // All other ranks send their elements, if they have any
+//         if (send.size() > 0) {
+//             MPI_Request r_send;
+//             // Non-blocking synchronous Send
+//             MPI_Issend(send.data(), send.size(), InternalForceType, master_rank, 0, world, &r_send);
+//
+//             MPI_Status s_send;
+//             MPI_Wait(&r_send, &s_send);
+//         }
+//         // Reaching here indicates to the comm that this rank's message has been recved by rank 0
+//         MPI_Ibarrier(world, &r_bar);
+//     }
+//
+//     MPI_Status stat;
+//     MPI_Wait(&r_bar, &stat);  // Wait for completion of all sending
+//
+//     // At this point, buf holds all forces on master_rank. All other ranks have num_gids=0.
+//     std::vector<std::pair<uint, ChVector<>>> forces;
+//     for (int i = 0; i < num_gids; i++) {
+//         ChVector<> frc(buffer[i].force[0], buffer[i].force[1], buffer[i].force[2]);
+//         forces.push_back(std::make_pair(buffer[i].gid, frc));
+//     }
+//
+//     delete[] buffer;
+//     return forces;
+// }
+
 std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForces(
     const std::vector<uint>& gids) const {
     // Gather forces on specified bodies
@@ -589,57 +669,30 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
         }
     }
 
-    // Master rank receives all messages sent to it and appends the values to its gid vector
-    MPI_Request r_bar;
-    MPI_Status s_bar;
-    internal_force* buffer = new internal_force[gids.size()];  // Beginning of buffer
-    internal_force* buf = buffer;                              // Moving pointer into buffer
-    int num_gids = 0;
+    // Send all forces to the master rank
+    // Buffer to collect forces on the master rank
+    internal_force* buffer = new internal_force[gids.size()];
+    int index = 0;  // Working index into buffer
     if (my_rank == master_rank) {
-        // Write own values
-        if (send.size() > 0) {
-            std::memcpy(buf, send.data(), sizeof(internal_force) * send.size());
-            buf += send.size();
-            num_gids += send.size();
-        }
-        MPI_Ibarrier(world, &r_bar);
-        MPI_Status s_prob;
-        int message_waiting = 0;
-        int r_bar_flag = 0;
+        std::memcpy(buffer, send.data(), sizeof(internal_force) * send.size());
+        index += send.size();
 
-        MPI_Test(&r_bar, &r_bar_flag, &s_bar);
-        while (!r_bar_flag) {
-            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, world, &message_waiting, &s_prob);
-            if (message_waiting) {
-                int count;
-                MPI_Get_count(&s_prob, InternalForceType, &count);
-                MPI_Request r_recv;
-                MPI_Irecv(buf, count, InternalForceType, s_prob.MPI_SOURCE, MPI_ANY_TAG, world, &r_recv);
-                buf += count;
-                num_gids += count;
-            }
-            MPI_Test(&r_bar, &r_bar_flag, &s_bar);
+        // Recv from all other ranks
+        for (int i = 1; i < num_ranks; i++) {
+            int count = 0;
+            MPI_Status status;
+            MPI_Probe(i, 0, world, &status);
+            MPI_Get_count(&status, InternalForceType, &count);
+            MPI_Recv(buffer + index, count, InternalForceType, i, 0, world, &status);
+            index += count;
         }
     } else {
-        // All other ranks send their elements, if they have any
-        if (send.size() > 0) {
-            MPI_Request r_send;
-            // Non-blocking synchronous Send
-            MPI_Issend(send.data(), send.size(), InternalForceType, master_rank, 0, world, &r_send);
-
-            MPI_Status s_send;
-            MPI_Wait(&r_send, &s_send);
-        }
-        // Reaching here indicates to the comm that this rank's message has been recved by rank 0
-        MPI_Ibarrier(world, &r_bar);
+        MPI_Send(send.data(), send.size(), InternalForceType, master_rank, 0, world);
     }
 
-    MPI_Status stat;
-    MPI_Wait(&r_bar, &stat);  // Wait for completion of all sending
-
-    // At this point, buf holds all forces on master_rank. All other ranks have num_gids=0.
+    // At this point, buf holds all forces on master_rank. All other ranks have index=0.
     std::vector<std::pair<uint, ChVector<>>> forces;
-    for (int i = 0; i < num_gids; i++) {
+    for (int i = 0; i < index; i++) {
         ChVector<> frc(buffer[i].force[0], buffer[i].force[1], buffer[i].force[2]);
         forces.push_back(std::make_pair(buffer[i].gid, frc));
     }
