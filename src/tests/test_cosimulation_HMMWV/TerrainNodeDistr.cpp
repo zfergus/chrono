@@ -910,27 +910,50 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
         cout << m_prefix << msg << endl;
 }
 
-void TerrainNodeDistr::DumpTireMesh() {
-    if (!OnMaster())
-        return;
+// Write proxy information for the specified tire after synchronization.
+void TerrainNodeDistr::DumpProxyData(int which) const {
+    char buf[10];
+    std::sprintf(buf, "%03d", m_system->GetCommRank());
+    std::string rank_str(buf);
 
-    TireData& tire_data = m_tire_data[0];
+    // Global IDs of the proxy bodies
+    auto& gids = m_tire_data[which].m_gids;
 
-    std::ofstream outv(m_node_out_dir + "/vertices.dat", std::ios::out);
-    outv.precision(7);
-    outv << std::scientific;
-    for (auto v : tire_data.m_vertex_pos) {
-        outv << v.x() << " " << v.y() << " " << v.z() << std::endl;
+    // Write information on proxy bodies (assumtion: single collision shape per body)
+    std::ofstream outb(m_node_out_dir + "/proxy_bodies_" + rank_str + ".dat", std::ios::out);
+    outb.precision(7);
+    outb << std::scientific;
+    int i = -1;
+    for (auto& body : m_system->Get_bodylist()) {
+        i++;
+        auto global_id = body->GetGid();
+        if (std::find(gids.begin(), gids.end(), global_id) == gids.end()) {
+            continue; // not a proxy body
+        }
+        auto status = m_system->ddm->comm_status[i];
+        auto identifier = body->GetIdentifier();
+        auto local_id = body->GetId();
+        auto local_id_G = m_system->ddm->GetLocalIndex(global_id);
+        auto pos = body->GetPos();
+
+        int ddm_start = m_system->ddm->body_shape_start[local_id];
+        int dm_start = m_system->ddm->body_shapes[ddm_start + 0];  // index in data_manager of the desired shape
+        int triangle_start = m_system->data_manager->shape_data.start_rigid[dm_start];
+
+        outb << global_id << " " << local_id << " " << local_id_G << " " << identifier << " ";
+        outb << status << " " << triangle_start << "  ";
+        outb << pos.x() << " " << pos.y() << " " << pos.z();
+        outb << std::endl;
     }
-    std::cout << "WROTE vertices: " << tire_data.m_vertex_pos.size() << std::endl;
 
-    std::ofstream outt(m_node_out_dir + "/triangles.dat", std::ios::out);
-    outt.precision(7);
-    outt << std::scientific;
-    for (auto tri : tire_data.m_triangles) {
-        outt << tri.x() << " " << tri.y() << " " << tri.z() << std::endl;
+    // Write triangle collision shapes
+    auto& data = m_system->data_manager->shape_data.triangle_rigid;
+    std::ofstream outf(m_node_out_dir + "/proxy_faces_" + rank_str + ".dat", std::ios::out);
+    outf.precision(7);
+    outf << std::scientific;
+    for (auto& v : data) {
+        outf << v.x << " " << v.y << " " << v.z << std::endl;
     }
-    std::cout << "WROTE triangles: " << tire_data.m_triangles.size() << std::endl;
 }
 
 // Set position, orientation, and velocity of proxy bodies based on tire mesh faces.
