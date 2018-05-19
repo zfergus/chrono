@@ -920,7 +920,8 @@ void TerrainNodeDistr::DumpProxyData(int which) const {
     auto& gids = m_tire_data[which].m_gids;
 
     // Write information on proxy bodies (assumtion: single collision shape per body)
-    std::ofstream outb(m_node_out_dir + "/proxy_bodies_" + rank_str + ".dat", std::ios::out);
+    std::ofstream outb(m_node_out_dir + "/proxy_bodies_" + std::to_string(which) + "_" + rank_str + ".dat",
+                       std::ios::out);
     outb.precision(7);
     outb << std::scientific;
     int i = -1;
@@ -948,7 +949,8 @@ void TerrainNodeDistr::DumpProxyData(int which) const {
 
     // Write triangle collision shapes
     auto& data = m_system->data_manager->shape_data.triangle_rigid;
-    std::ofstream outf(m_node_out_dir + "/proxy_faces_" + rank_str + ".dat", std::ios::out);
+    std::ofstream outf(m_node_out_dir + "/proxy_faces_" + std::to_string(which) + "_" + rank_str + ".dat",
+                       std::ios::out);
     outf.precision(7);
     outf << std::scientific;
     for (auto& v : data) {
