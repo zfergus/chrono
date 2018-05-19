@@ -46,21 +46,13 @@ using namespace chrono::vehicle;
 
 // =============================================================================
 
-// Cosimulation step size
-double step_size = 5e-5;
-////double step_size = 1e-3;
-
 // Tire model
-////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
+std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
-std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
 
 // Terrain settling time
 double time_settling = 1;
-
-// Terrain granular material parameters
-double particle_radius = 0.08;
-double particle_density = 2500;
 
 // Number of layers
 int num_layers = 6;
@@ -97,8 +89,10 @@ enum {
     OPT_THREADS_TERRAIN,
     OPT_USE_CHECKPOINT,
     OPT_SIM_TIME,
+    OPT_STEP_SIZE,
     OPT_NO_OUTPUT,
     OPT_NO_RENDERING,
+    OPT_PART_RADIUS,
     OPT_COHESION,
     OPT_INIT_VEL,
     OPT_INIT_OMEGA,
@@ -116,8 +110,12 @@ CSimpleOptA::SOption g_options[] = {{OPT_THREADS_TIRE, "--num-threads-tire", SO_
                                     {OPT_USE_CHECKPOINT, "--use-checkpoint", SO_REQ_CMB},
                                     {OPT_SIM_TIME, "-t", SO_REQ_CMB},
                                     {OPT_SIM_TIME, "--simulation-time", SO_REQ_CMB},
+                                    {OPT_STEP_SIZE, "-s=STEP_SIZE", SO_REQ_CMB},
+                                    {OPT_STEP_SIZE, "--step-size=STEP_SIZE", SO_REQ_CMB},
                                     {OPT_NO_OUTPUT, "--no-output", SO_NONE},
                                     {OPT_NO_RENDERING, "--no-rendering", SO_NONE},
+                                    {OPT_PART_RADIUS, "-r", SO_REQ_CMB},
+                                    {OPT_PART_RADIUS, "--particle-radius", SO_REQ_CMB},
                                     {OPT_COHESION, "-ch", SO_REQ_CMB},
                                     {OPT_COHESION, "--cohesion-terrain", SO_REQ_CMB},
                                     {OPT_INIT_VEL, "-v", SO_REQ_CMB},
@@ -138,6 +136,8 @@ bool GetProblemSpecs(int argc,
                      int& nthreads_tire,
                      int& nthreads_terrain,
                      double& sim_time,
+                     double& step_size,
+                     double& particle_radius,
                      double& cohesion,
                      double& init_fwd_vel,
                      double& init_wheel_omega,
@@ -172,7 +172,9 @@ int main(int argc, char** argv) {
     // Parse command line arguments
     int nthreads_tire = 2;
     int nthreads_terrain = 2;
-    double sim_time = 5;
+    double sim_time = 10;
+    double step_size = 4e-5;
+    double particle_radius = 0.006;
     double coh_pressure = 8e4;
     double init_fwd_vel = 0;
     double init_wheel_omega = 0;
@@ -180,8 +182,8 @@ int main(int argc, char** argv) {
     bool output = true;
     bool render = true;
     std::string suffix = "";
-    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, coh_pressure, init_fwd_vel,
-                         init_wheel_omega, use_checkpoint, output, render, suffix)) {
+    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, particle_radius, coh_pressure,
+                         init_fwd_vel, init_wheel_omega, use_checkpoint, output, render, suffix)) {
         MPI_Finalize();
         return 1;
     }
@@ -215,15 +217,15 @@ int main(int argc, char** argv) {
             container_height = 1;
             break;
         case VehicleNode::DATA_DRIVER:
-            container_length = 10;
+            container_length = 15;
             container_width = 3;
             container_height = 1;
             break;
         case VehicleNode::PATH_DRIVER:
-            container_length = 10;
+            container_length = 110;
             container_width = 6;
             container_height = 1;
-            path = DoubleLaneChangePath(ChVector<>(0, -1.5, 0), 20, 3, 20, 50, true);
+            path = DoubleLaneChangePath(ChVector<>(container_length / 2, -1.5, 0), 20, 3, 20, 40, true);
             break;
     }
 
@@ -261,7 +263,7 @@ int main(int argc, char** argv) {
                     break;
                 }
                 case VehicleNode::PATH_DRIVER: {
-                    double target_speed = 15.0;
+                    double target_speed = 10.0;
                     my_vehicle->SetPathDriver(path, target_speed);
                     cout << my_vehicle->GetPrefix() << " Path following.  V = " << target_speed << endl;
                     break;
@@ -326,7 +328,7 @@ int main(int argc, char** argv) {
             my_terrain->EnableSettlingOutput(settling_output);
 
             my_terrain->SetProxyProperties(1, false);
-            my_terrain->SetGranularMaterial(particle_radius, particle_density, num_layers);
+            my_terrain->SetGranularMaterial(particle_radius, 2500, num_layers);
             my_terrain->SetSettlingTime(time_settling);
             my_terrain->Settle(use_checkpoint);
 
@@ -456,6 +458,12 @@ void ShowUsage() {
     cout << " -t=SIM_TIME" << endl;
     cout << " --simulation-time=SIM_TIME" << endl;
     cout << "        Specify simulation length in seconds [default: 10]" << endl;
+    cout << " -s=STEP_SIZE" << endl;
+    cout << " --step-size=STEP_SIZE" << endl;
+    cout << "        Specify integration step size in seconds [default: 4e-5]" << endl;
+    cout << " -r=RADIUS" << endl;
+    cout << " --particle-radius=RADIUS" << endl;
+    cout << "        Specify particle radius for granular terrain in m [default: 0.006]" << endl;
     cout << " -ch=COHESION" << endl;
     cout << " --cohesion-terrain=COHESION" << endl;
     cout << "        Specify the value of the terrain cohesion in Pa [default: 80e3]" << endl;
@@ -482,6 +490,8 @@ bool GetProblemSpecs(int argc,
                      int& nthreads_tire,
                      int& nthreads_terrain,
                      double& sim_time,
+                     double& step_size,
+                     double& particle_radius,
                      double& cohesion,
                      double& init_fwd_vel,
                      double& init_wheel_omega,
@@ -518,6 +528,12 @@ bool GetProblemSpecs(int argc,
                 break;
             case OPT_SIM_TIME:
                 sim_time = std::stod(args.OptionArg());
+                break;
+            case OPT_STEP_SIZE:
+                step_size = std::stod(args.OptionArg());
+                break;
+            case OPT_PART_RADIUS:
+                particle_radius = std::stod(args.OptionArg());
                 break;
             case OPT_COHESION:
                 cohesion = std::stod(args.OptionArg());
