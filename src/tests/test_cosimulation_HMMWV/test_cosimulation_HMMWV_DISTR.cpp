@@ -54,9 +54,6 @@ std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
 // Terrain settling time
 double time_settling = 1;
 
-// Number of layers
-int num_layers = 6;
-
 // Driver type
 //   DATA_DRIVER:  throttle, steering, and braking inputs provided at time points
 //   DEFAULT_DRIVER: zero vehicle inputs (vehicle dropped on granular terrain)
@@ -72,7 +69,7 @@ bool initial_output = false;
 bool settling_output = false;
 
 // Output frequency (frames per second)
-double output_fps = 100;
+double output_fps = 60;
 
 // Checkpointing frequency (frames per second)
 double checkpoint_fps = 100;
@@ -92,6 +89,7 @@ enum {
     OPT_STEP_SIZE,
     OPT_NO_OUTPUT,
     OPT_NO_RENDERING,
+    OPT_NUM_LAYERS,
     OPT_PART_RADIUS,
     OPT_COHESION,
     OPT_INIT_VEL,
@@ -114,6 +112,8 @@ CSimpleOptA::SOption g_options[] = {{OPT_THREADS_TIRE, "--num-threads-tire", SO_
                                     {OPT_STEP_SIZE, "--step-size=STEP_SIZE", SO_REQ_CMB},
                                     {OPT_NO_OUTPUT, "--no-output", SO_NONE},
                                     {OPT_NO_RENDERING, "--no-rendering", SO_NONE},
+                                    {OPT_NUM_LAYERS, "-n", SO_REQ_CMB},
+                                    {OPT_NUM_LAYERS, "--num-layers", SO_REQ_CMB},
                                     {OPT_PART_RADIUS, "-r", SO_REQ_CMB},
                                     {OPT_PART_RADIUS, "--particle-radius", SO_REQ_CMB},
                                     {OPT_COHESION, "-ch", SO_REQ_CMB},
@@ -137,6 +137,7 @@ bool GetProblemSpecs(int argc,
                      int& nthreads_terrain,
                      double& sim_time,
                      double& step_size,
+                     int& num_layers,
                      double& particle_radius,
                      double& cohesion,
                      double& init_fwd_vel,
@@ -172,17 +173,18 @@ int main(int argc, char** argv) {
     // Parse command line arguments
     int nthreads_tire = 2;
     int nthreads_terrain = 2;
-    double sim_time = 10;
+    double sim_time = 5;
     double step_size = 4e-5;
-    double particle_radius = 0.006;
-    double coh_pressure = 8e4;
+    int num_layers = 15;
+    double particle_radius = 0.012;
+    double coh_pressure = 100e3;
     double init_fwd_vel = 0;
     double init_wheel_omega = 0;
     bool use_checkpoint = false;
     bool output = true;
     bool render = true;
     std::string suffix = "";
-    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, particle_radius, coh_pressure,
+    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, num_layers, particle_radius, coh_pressure,
                          init_fwd_vel, init_wheel_omega, use_checkpoint, output, render, suffix)) {
         MPI_Finalize();
         return 1;
@@ -212,12 +214,12 @@ int main(int argc, char** argv) {
 
     switch (driver_type) {
         case VehicleNode::DEFAULT_DRIVER:
-            container_length = 10;
+            container_length = 5.5;
             container_width = 3;
             container_height = 1;
             break;
         case VehicleNode::DATA_DRIVER:
-            container_length = 15;
+            container_length = 10;
             container_width = 3;
             container_height = 1;
             break;
@@ -461,6 +463,9 @@ void ShowUsage() {
     cout << " -s=STEP_SIZE" << endl;
     cout << " --step-size=STEP_SIZE" << endl;
     cout << "        Specify integration step size in seconds [default: 4e-5]" << endl;
+    cout << " -n=NUM_LAYERS" << endl;
+    cout << " --num-layers=NUM_LAYERS" << endl;
+    cout << "        Specify the initial number of particle layers [default: 15]" << endl;
     cout << " -r=RADIUS" << endl;
     cout << " --particle-radius=RADIUS" << endl;
     cout << "        Specify particle radius for granular terrain in m [default: 0.006]" << endl;
@@ -491,6 +496,7 @@ bool GetProblemSpecs(int argc,
                      int& nthreads_terrain,
                      double& sim_time,
                      double& step_size,
+                     int& num_layers,
                      double& particle_radius,
                      double& cohesion,
                      double& init_fwd_vel,
@@ -531,6 +537,9 @@ bool GetProblemSpecs(int argc,
                 break;
             case OPT_STEP_SIZE:
                 step_size = std::stod(args.OptionArg());
+                break;
+            case OPT_NUM_LAYERS:
+                num_layers = std::stoi(args.OptionArg());
                 break;
             case OPT_PART_RADIUS:
                 particle_radius = std::stod(args.OptionArg());
