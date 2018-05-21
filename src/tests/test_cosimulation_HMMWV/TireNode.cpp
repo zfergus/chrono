@@ -183,11 +183,9 @@ void TireNode::Initialize() {
     MPI_Status status;
     MPI_Recv(init_state, 7, MPI_DOUBLE, VEHICLE_NODE_RANK, m_wheel_id.id(), MPI_COMM_WORLD, &status);
 
-    if (m_verbose) {
-        cout << m_prefix << " Init. loc. = " << init_state[0] << " " << init_state[1] << " " << init_state[2] << endl;
-        cout << m_prefix << " Init. rot. = " << init_state[3] << " " << init_state[4] << " " << init_state[5] << " "
-             << init_state[6] << endl;
-    }
+    cout << m_prefix << " Init. loc. = " << init_state[0] << " " << init_state[1] << " " << init_state[2] << endl;
+    cout << m_prefix << " Init. rot. = " << init_state[3] << " " << init_state[4] << " " << init_state[5] << " "
+         << init_state[6] << endl;
 
     ChVector<> loc(init_state[0], init_state[1], init_state[2]);
     ChQuaternion<> rot(init_state[3], init_state[4], init_state[5], init_state[6]);
@@ -236,8 +234,8 @@ void TireNode::Initialize() {
 
     // Number of vertices and triangles
     MPI_Send(surf_props.data(), 2, MPI_UNSIGNED, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
-    if (m_verbose)
-        cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
+
+    cout << m_prefix << " vertices = " << surf_props[0] << "  triangles = " << surf_props[1] << endl;
 
     // Mesh connectivity
     std::vector<ChVector<>> vert_pos;
@@ -268,8 +266,8 @@ void TireNode::Initialize() {
 
     // Material properties
     MPI_Send(mat_props.data(), 8, MPI_FLOAT, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD);
-    if (m_verbose)
-        cout << m_prefix << " friction = " << mat_props[0] << endl;
+
+    cout << m_prefix << " friction = " << mat_props[0] << endl;
 
     // ----------------------------------
     // Write file with tire node settings
@@ -629,7 +627,7 @@ void TireNode::OutputData(int frame) {
         m_outf << rim_angvel.x() << del << rim_angvel.y() << del << rim_angvel.z() << del;
         // Solver statistics (for last integration step)
         m_outf << m_system->GetTimerStep() << del << m_system->GetTimerSetup() << del << m_system->GetTimerSolver()
-               << del << m_system->GetTimerUpdate();
+               << del << m_system->GetTimerUpdate() << del;
         m_outf << m_integrator->GetNumIterations() << del << m_integrator->GetNumSetupCalls() << del
                << m_integrator->GetNumSolveCalls() << del;
         // Tire-specific stats

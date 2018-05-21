@@ -118,10 +118,8 @@ void VehicleNode::Initialize() {
     MPI_Status status;
     MPI_Recv(init_dim, 2, MPI_DOUBLE, TERRAIN_NODE_RANK, 0, MPI_COMM_WORLD, &status);
 
-    if (m_verbose) {
-        cout << m_prefix << " Received initial terrain height = " << init_dim[0] << endl;
-        cout << m_prefix << " Received container half-length = " << init_dim[1] << endl;
-    }
+    cout << m_prefix << " Received initial terrain height = " << init_dim[0] << endl;
+    cout << m_prefix << " Received container half-length = " << init_dim[1] << endl;
 
     // Set initial vehicle position and orientation
     double y_offset = 0;

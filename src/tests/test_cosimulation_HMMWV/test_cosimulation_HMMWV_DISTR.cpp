@@ -62,17 +62,23 @@ VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
 ////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
 ////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
 
+// Enable detailed console print
+bool verbose = false;
+
 // Output initial body information
 bool initial_output = false;
 
 // Output during settling phase
-bool settling_output = false;
+bool settling_output = true;
 
 // Output frequency (frames per second)
 double output_fps = 60;
 
 // Checkpointing frequency (frames per second)
 double checkpoint_fps = 100;
+
+// Console reporting frequency (frames per second)
+double report_fps = 1000;
 
 // Output directory
 std::string out_dir = "../HMMWV_COSIM_DISTR";
@@ -184,8 +190,9 @@ int main(int argc, char** argv) {
     bool output = true;
     bool render = true;
     std::string suffix = "";
-    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, num_layers, particle_radius, coh_pressure,
-                         init_fwd_vel, init_wheel_omega, use_checkpoint, output, render, suffix)) {
+    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, num_layers,
+                         particle_radius, coh_pressure, init_fwd_vel, init_wheel_omega, use_checkpoint, output, render,
+                         suffix)) {
         MPI_Finalize();
         return 1;
     }
@@ -239,7 +246,7 @@ int main(int argc, char** argv) {
     switch (rank) {
         case VEHICLE_NODE_RANK: {
             my_vehicle = new VehicleNode();
-            ////my_vehicle->SetVerbose(false);
+            my_vehicle->SetVerbose(verbose);
             my_vehicle->SetStepSize(step_size);
             my_vehicle->SetOutDir(out_dir, suffix);
             my_vehicle->SetChassisFixed(false);
@@ -280,7 +287,7 @@ int main(int argc, char** argv) {
         case TIRE_NODE_RANK(3): {
             int wheel_id = rank - 2;
             my_tire = new TireNode(vehicle::GetDataFile(tire_filename), WheelID(wheel_id), nthreads_tire);
-            ////my_tire->SetVerbose(false);
+            my_tire->SetVerbose(verbose);
             my_tire->SetStepSize(step_size);
             my_tire->SetOutDir(out_dir, suffix);
             cout << my_tire->GetPrefix() << " rank = " << rank << " running on: " << procname << endl;
@@ -290,17 +297,17 @@ int main(int argc, char** argv) {
             my_tire->EnableTirePressure(true);
 
             my_tire->SetVerboseSolver(false);
-            my_tire->SetVerboseStates(wheel_id == 0);
             my_tire->SetVerboseForces(false);
+            my_tire->SetVerboseStates(false);
+            ////my_tire->SetVerboseSolver(wheel_id == 0);
+            ////my_tire->SetVerboseForces(wheel_id == 0);
+            ////my_tire->SetVerboseStates(wheel_id == 0);
 
             break;
         }
         default: {
-            ////std::string cout_filename = out_dir + "/cout_" + std::to_string(rank) + ".out";
-            ////std::ofstream out(cout_filename.c_str());
-            ////std::cout.rdbuf(out.rdbuf());
-
             my_terrain = new TerrainNodeDistr(cosim::GetTerrainIntracommunicator(), 4, render, nthreads_terrain);
+            my_terrain->SetVerbose(verbose);
             my_terrain->SetStepSize(step_size);
             my_terrain->SetOutDir(out_dir, suffix);
             if (rank == TERRAIN_NODE_RANK) {
@@ -365,6 +372,7 @@ int main(int argc, char** argv) {
     int sim_steps = (int)std::ceil(sim_time / step_size);
     int output_steps = (int)std::ceil(1 / (output_fps * step_size));
     int checkpoint_steps = (int)std::ceil(1 / (checkpoint_fps * step_size));
+    int report_steps = (int)std::ceil(1 / (report_fps * step_size));
 
     // Perform co-simulation.
     // At synchronization, there is bi-directional data exchange:
@@ -372,21 +380,29 @@ int main(int argc, char** argv) {
     //     terrain => tire (vertex force information)
     //     tire => vehicle (wheel force)
     //     vehicle => tire (wheel state)
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    ChTimer<double> timer;
+    double cum_time = 0;
+
     int output_frame = 0;
     int checkpoint_frame = 0;
 
     for (int is = 0; is < sim_steps; is++) {
         double time = is * step_size;
-
-        MPI_Barrier(MPI_COMM_WORLD);
+        timer.reset();
+        timer.start();
 
         switch (rank) {
             case VEHICLE_NODE_RANK: {
-                cout << is << " ---------------------------- " << endl;
                 my_vehicle->Synchronize(is, time);
                 my_vehicle->Advance(step_size);
-                cout << my_vehicle->GetPrefix() << " sim time = " << my_vehicle->GetSimTime() << "  ["
-                     << my_vehicle->GetTotalSimTime() << "]" << endl;
+
+                if (is % report_steps == 0) {
+                    cout << is << " ---------------------------- " << endl;
+                    cout << my_vehicle->GetPrefix() << " sim time = " << my_vehicle->GetSimTime() << "  ["
+                         << my_vehicle->GetTotalSimTime() << "]" << endl;
+                }
 
                 if (output && is % output_steps == 0) {
                     my_vehicle->OutputData(output_frame);
@@ -401,8 +417,11 @@ int main(int argc, char** argv) {
             case TIRE_NODE_RANK(3): {
                 my_tire->Synchronize(is, time);
                 my_tire->Advance(step_size);
-                cout << my_tire->GetPrefix() << " sim time = " << my_tire->GetSimTime() << "  ["
-                     << my_tire->GetTotalSimTime() << "]" << endl;
+
+                if (is % report_steps == 0) {
+                    cout << my_tire->GetPrefix() << " sim time = " << my_tire->GetSimTime() << "  ["
+                         << my_tire->GetTotalSimTime() << "]" << endl;
+                }
 
                 if (output && is % output_steps == 0) {
                     my_tire->OutputData(output_frame);
@@ -412,9 +431,20 @@ int main(int argc, char** argv) {
             }
             default: {
                 my_terrain->Synchronize(is, time);
+
+                ////if (time > 1.5) {
+                ////my_terrain->DumpProxyData(0);
+                ////my_terrain->DumpProxyData(1);
+                ////my_terrain->DumpProxyData(2);
+                ////my_terrain->DumpProxyData(3);
+                ////MPI_Barrier(MPI_COMM_WORLD);
+                ////if (rank == TERRAIN_NODE_RANK)
+                ////    MPI_Abort(MPI_COMM_WORLD, 1);
+                ////}
+
                 my_terrain->Advance(step_size);
 
-                if (rank == TERRAIN_NODE_RANK) {
+                if (rank == TERRAIN_NODE_RANK && is % report_steps == 0) {
                     cout << my_terrain->GetPrefix() << " sim time = " << my_terrain->GetSimTime() << "  ["
                          << my_terrain->GetTotalSimTime() << "]" << endl;
                 }
@@ -431,6 +461,14 @@ int main(int argc, char** argv) {
 
                 break;
             }
+        }
+
+        timer.stop();
+        cum_time += timer();
+        double max_cum_time;
+        MPI_Reduce(&cum_time, &max_cum_time, 1, MPI_DOUBLE, MPI_MAX, VEHICLE_NODE_RANK, MPI_COMM_WORLD);
+        if (rank == VEHICLE_NODE_RANK && is % report_steps == 0) {
+            cout << "sim time = " << max_cum_time << endl;
         }
     }
 

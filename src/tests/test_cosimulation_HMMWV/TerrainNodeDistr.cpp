@@ -562,6 +562,10 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
         int output_steps = (int)std::ceil(1 / (output_fps * m_step_size));
         int output_frame = 0;
 
+        if (OnMaster()) {
+            cout << m_prefix << " start settling" << endl;
+        }
+
         for (int is = 0; is < sim_steps; is++) {
             // Advance step
             m_timer.reset();
@@ -570,21 +574,18 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
             m_timer.stop();
             m_cum_sim_time += m_timer();
 
-            if (OnMaster()) {
-                cout << '\r' << std::fixed << std::setprecision(6) << m_system->GetChTime() << "  ["
-                     << m_timer.GetTimeSeconds() << "]" << std::flush;
+            if (OnMaster() && is % output_steps == 0) {
+                cout << std::fixed << m_system->GetChTime() << "  [" << m_timer.GetTimeSeconds() << "]" << std::endl;
+            }
 
-                //// TODO: This should be done on all ranks
-
-                // Output (if enabled)
-                if (m_settling_output && is % output_steps == 0) {
-                    char filename[100];
-                    sprintf(filename, "%s/settling_%04d.dat", m_node_out_dir.c_str(), output_frame + 1);
-                    utils::CSV_writer csv(" ");
-                    WriteParticleInformation(csv);
-                    csv.write_to_file(filename);
-                    output_frame++;
-                }
+            // Output (if enabled)
+            if (m_settling_output && is % output_steps == 0) {
+                char filename[100];
+                sprintf(filename, "%s/settling_%04d.dat", m_rank_out_dir.c_str(), output_frame + 1);
+                utils::CSV_writer csv(" ");
+                WriteParticleInformation(csv);
+                csv.write_to_file(filename);
+                output_frame++;
             }
 
 #ifdef CHRONO_OPENGL
@@ -906,7 +907,7 @@ void TerrainNodeDistr::Synchronize(int step_number, double time) {
 
     msg += "]";
 
-    if (OnMaster())
+    if (m_verbose && OnMaster())
         cout << m_prefix << msg << endl;
 }
 
@@ -1127,7 +1128,10 @@ void TerrainNodeDistr::Advance(double step_size) {
 void TerrainNodeDistr::OutputData(int frame) {
     // Append to results output file
     if (m_outf.is_open()) {
-        //// TODO
+        std::string del("  ");
+
+        m_outf << m_system->GetChTime() << del << GetSimTime() << del << GetTotalSimTime() << del;
+        m_outf << endl;
     }
 
     // Create and write frame output file.
