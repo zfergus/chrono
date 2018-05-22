@@ -186,6 +186,7 @@ class TerrainNodeDistr : public BaseNode {
     bool m_initial_output;   ///< output initial particle information?
 
     int m_particles_start_index;  ///< start index for granular material bodies in system body list
+    double m_initial_height;      ///< highest particle Z coordinate when proxies are created
 
     std::shared_ptr<chrono::ChBezierCurve> m_path;  ///< path for closed-loop driver (for rendering only, may be empty)
 

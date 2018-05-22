@@ -104,7 +104,8 @@ TerrainNodeDistr::TerrainNodeDistr(MPI_Comm terrain_comm, int num_tires, bool re
       m_settling_output(false),
       m_initial_output(false),
       m_num_particles(0),
-      m_particles_start_index(0) {
+      m_particles_start_index(0),
+      m_initial_height(0) {
     MPI_Comm_rank(MPI_COMM_WORLD, &m_world_rank);
     if (cosim::IsInitialized()) {
         MPI_Comm_rank(terrain_comm, &m_terrain_rank);
@@ -393,8 +394,12 @@ void TerrainNodeDistr::Construct() {
     // Get total number of particles (global)
     m_num_particles = gen.getTotalNumBodies();
 
+    // Heighest particle Z coordinate
+    m_initial_height = (2 * r) * m_num_layers;
+
     if (OnMaster()) {
         cout << m_prefix << " Generated particles:  " << m_num_particles << endl;
+        cout << m_prefix << " Highest particle at:  " << m_initial_height << endl;
     }
 
     cout << m_prefix << " LocalRank: " << m_terrain_rank << " Local num. particles: " << m_system->GetNumBodies()
@@ -548,6 +553,8 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
             body->SetRot_dt(ChQuaternion<>(rot_dt.e0(), rot_dt.e1(), rot_dt.e2(), rot_dt.e3()));
         }
 
+        //// TODO: set m_initial_height
+
         if (OnMaster()) {
             cout << m_prefix << " read checkpoint <=== " << checkpoint_filename
                  << "   num. particles = " << num_particles << endl;
@@ -561,6 +568,10 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
         int sim_steps = (int)std::ceil(m_time_settling / m_step_size);
         int output_steps = (int)std::ceil(1 / (output_fps * m_step_size));
         int output_frame = 0;
+
+        // Return now if time_settling = 0
+        if (sim_steps == 0)
+            return;
 
         if (OnMaster()) {
             cout << m_prefix << " start settling" << endl;
@@ -601,6 +612,14 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
 #endif
         }
 
+        //// TODO: clean up the ChSystemDistributed::GetHighestZ function
+        ////       - here we do not need an AllReduce
+        ////       - can we / should we be able to "filter" what bodies we consider in this operation?
+        ////
+
+        // Find "height" of granular material
+        m_initial_height = m_system->GetHighestZ();
+
         if (OnMaster()) {
             cout << m_prefix << " settling time = " << m_cum_sim_time << endl;
         }
@@ -620,19 +639,6 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
 void TerrainNodeDistr::Initialize() {
     Construct();
 
-    // ----------------------------------
-    // Find "height" of granular material
-    // ----------------------------------
-
-    ////
-    //// TODO: clean up this ChsystemDistributed function
-    ////       - here we do not need an AllReduce
-    ////       - can we / should we be able to "filter" what bodies we consider in this operation?
-    ////
-
-    double init_height = m_system->GetHighestZ();
-    init_height += m_radius_g;
-
     // Reset system time
     m_system->SetChTime(0);
 
@@ -641,6 +647,7 @@ void TerrainNodeDistr::Initialize() {
     // ---------------------------------------------
 
     if (OnMaster()) {
+        double init_height = m_initial_height + m_radius_g;
         double init_dim[2] = {init_height, m_hdimX};
         MPI_Send(init_dim, 2, MPI_DOUBLE, VEHICLE_NODE_RANK, 0, MPI_COMM_WORLD);
 
