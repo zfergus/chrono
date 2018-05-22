@@ -309,7 +309,7 @@ void ChCommDistributed::Exchange() {
             }
         }  // end of exchange section
 
-            // Update Loop
+        // Update Loop
 #pragma omp section
         {
             // PACKING and UPDATING comm_status of existing bodies
@@ -383,7 +383,7 @@ void ChCommDistributed::Exchange() {
             }  // End of packing for loop
         }      // End of update section
 
-            // Update Take Loop
+        // Update Take Loop
 #pragma omp section
         {
             // PACKING and UPDATING comm_status of existing bodies
@@ -734,7 +734,7 @@ void ChCommDistributed::PackExchange(BodyExchange* buf, int index) {
     // Material SMC
     buf->mu = data_manager->host_data.mu[index];  // Static Friction
 
-    buf->adhesionMultDMT = data_manager->host_data.adhesionMultDMT_data[index];  // Adhesion
+    buf->cohesion = data_manager->host_data.cohesion_data[index];  // Adhesion
 
     if (data_manager->settings.solver.use_material_properties) {
         buf->ym_kn = data_manager->host_data.elastic_moduli[index].x;  // Young's Modulus
@@ -783,7 +783,7 @@ void ChCommDistributed::UnpackExchange(BodyExchange* buf, std::shared_ptr<ChBody
     std::shared_ptr<ChMaterialSurfaceSMC> mat = std::make_shared<ChMaterialSurfaceSMC>();
 
     mat->SetFriction(buf->mu);  // Static Friction
-    mat->adhesionMultDMT = buf->adhesionMultDMT;
+    mat->SetAdhesion(buf->cohesion);
 
     if (data_manager->settings.solver.use_material_properties) {
         mat->young_modulus = buf->ym_kn;
@@ -889,7 +889,7 @@ int ChCommDistributed::PackShapes(std::vector<Shape>* buf, int index) {
                 shape.data[3] = shape_data.triangle_rigid[start + 2].x;
                 shape.data[4] = shape_data.triangle_rigid[start + 2].y;
                 shape.data[5] = shape_data.triangle_rigid[start + 2].z;
-				break;
+                break;
             case chrono::collision::ELLIPSOID:
                 // Pack B
                 shape.data[0] = shape_data.box_like_rigid[start].x;
