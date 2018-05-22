@@ -48,8 +48,10 @@ using namespace chrono::vehicle;
 
 // Tire model
 std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire_Lumped.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
+////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
 
 // Terrain settling time
 double time_settling = 1;
