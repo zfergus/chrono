@@ -116,7 +116,7 @@ TireNode::TireNode(const std::string& json_filename, WheelID wheel_id, int num_t
     // ----------------------------------
 
     m_system = new ChSystemSMC;
-    m_system->Set_G_acc(ChVector<>(0, 0, m_gacc));
+    m_system->Set_G_acc(m_gacc);
 
     // Set number threads
     m_system->SetParallelThreadNumber(num_threads);

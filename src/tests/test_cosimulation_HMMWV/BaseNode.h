@@ -28,6 +28,7 @@
 #include <string>
 
 #include "chrono/core/ChTimer.h"
+#include "chrono/core/ChVector.h"
 
 /// Ranks (within MPI_COMMM_WORLD) of the processes involved in co-simulation communication.
 #define VEHICLE_NODE_RANK 0
@@ -99,7 +100,7 @@ class BaseNode {
 
     bool m_verbose;
 
-    static const double m_gacc;
+    static const chrono::ChVector<> m_gacc;
 };
 
 #endif

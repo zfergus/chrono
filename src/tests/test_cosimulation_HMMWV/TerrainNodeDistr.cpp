@@ -143,7 +143,7 @@ TerrainNodeDistr::TerrainNodeDistr(MPI_Comm terrain_comm, int num_tires, bool re
 
     // Create system and set default method-specific solver settings
     m_system = new ChSystemDistributed(terrain_comm, 2 * m_radius_g, 10000);
-    m_system->Set_G_acc(ChVector<>(0, 0, m_gacc));
+    m_system->Set_G_acc(m_gacc);
 
     m_prefix = "[Terrain node]";
     if (OnMaster()) {

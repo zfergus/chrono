@@ -140,7 +140,7 @@ TerrainNode::TerrainNode(Type type,
     }
 
     // Solver settings independent of method type
-    m_system->Set_G_acc(ChVector<>(0, 0, m_gacc));
+    m_system->Set_G_acc(m_gacc);
     m_system->GetSettings()->perform_thread_tuning = false;
     m_system->GetSettings()->solver.use_full_inertia_tensor = false;
     m_system->GetSettings()->solver.tolerance = 0.1;

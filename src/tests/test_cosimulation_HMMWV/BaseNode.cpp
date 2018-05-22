@@ -22,7 +22,7 @@
 #include "BaseNode.h"
 #include "chrono/core/ChFileutils.h"
 
-const double BaseNode::m_gacc = -9.81;
+const chrono::ChVector<> BaseNode::m_gacc(0, 0, -9.81);
 
 BaseNode::BaseNode(const std::string& name)
     : m_name(name), m_step_size(1e-4), m_prefix("[]"), m_cum_sim_time(0), m_verbose(true) {}

@@ -62,7 +62,7 @@ VehicleNode::VehicleNode()
     // ----------------------------------
 
     m_system = new ChSystemSMC;
-    m_system->Set_G_acc(ChVector<>(0, 0, m_gacc));
+    m_system->Set_G_acc(m_gacc);
 
     // Set number threads
     m_system->SetParallelThreadNumber(1);
