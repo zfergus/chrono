@@ -637,6 +637,10 @@ void ChElementShellANCF::ComputeInternalForces(ChMatrixDynamic<>& Fi) {
 
             if (count >= 2)
                 GetLog() << "  count " << count << "  NormHE " << norm_HE << "\n";
+
+            if (count == 5) {
+                throw ChException("EAS convergence failure");
+            }
         }
 
         // Accumulate internal force
