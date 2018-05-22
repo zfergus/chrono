@@ -101,8 +101,11 @@ class TerrainNodeDistr : public BaseNode {
     void SetSettlingTime(double time) { m_time_settling = time; }
 
     /// Enable/disable output during settling (default: false).
-    /// If enabled, output files are generated with a frequency of 100 FPS.
-    void EnableSettlingOutput(bool val) { m_settling_output = val; }
+    /// If enabled, output files are generated with the specified frequency.
+    void EnableSettlingOutput(bool val, double fps) {
+        m_settling_output = val;
+        m_settling_output_fps = fps;
+    }
 
     /// Enable/disable output of initial body information (default: false).
     /// Output includes body information after granular material creation (files init_particles_xxx.dat)
@@ -181,9 +184,10 @@ class TerrainNodeDistr : public BaseNode {
     double m_radius_g;             ///< radius of one particle of granular material
     double m_rho_g;                ///< particle material density
 
-    double m_time_settling;  ///< simulation length for settling of granular material
-    bool m_settling_output;  ///< output files during settling?
-    bool m_initial_output;   ///< output initial particle information?
+    double m_time_settling;        ///< simulation length for settling of granular material
+    bool m_settling_output;        ///< generate output files during settling?
+    double m_settling_output_fps;  ///< output frequency during settling
+    bool m_initial_output;         ///< generate output files with initial particle information?
 
     int m_particles_start_index;  ///< start index for granular material bodies in system body list
     double m_initial_height;      ///< highest particle Z coordinate when proxies are created

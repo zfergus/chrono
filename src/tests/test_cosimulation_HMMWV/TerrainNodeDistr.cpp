@@ -129,6 +129,7 @@ TerrainNodeDistr::TerrainNodeDistr(MPI_Comm terrain_comm, int num_tires, bool re
     m_rho_g = 2000;
     m_num_layers = 5;
     m_time_settling = 0.4;
+    m_settling_output_fps = 100;
 
     // Default proxy body properties
     m_fixed_proxies = false;
@@ -564,9 +565,8 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
         // -------------------------------------
         // Simulate settling of granular terrain
         // -------------------------------------
-        double output_fps = 100;
         int sim_steps = (int)std::ceil(m_time_settling / m_step_size);
-        int output_steps = (int)std::ceil(1 / (output_fps * m_step_size));
+        int output_steps = (int)std::ceil(1 / (m_settling_output_fps * m_step_size));
         int output_frame = 0;
 
         // Return now if time_settling = 0

@@ -336,7 +336,7 @@ int main(int argc, char** argv) {
             my_terrain->SetContactForceModel(ChSystemSMC::PlainCoulomb);
 
             my_terrain->EnableInitialOutput(initial_output);
-            my_terrain->EnableSettlingOutput(settling_output);
+            my_terrain->EnableSettlingOutput(settling_output, output_fps);
 
             my_terrain->SetProxyProperties(1, false);
             my_terrain->SetGranularMaterial(particle_radius, 2500, num_layers);
