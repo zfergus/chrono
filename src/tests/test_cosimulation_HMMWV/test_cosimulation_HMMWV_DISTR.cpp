@@ -53,8 +53,8 @@ std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
 ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
 
-// Size of ghost layer
-double ghost_layer = 0.026;
+// Maximum "radius" of a proxy triangle 
+double triangle_radius = 0.026;
 
 // Terrain settling time
 double time_settling = 1;
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
 
             my_terrain->SetProxyProperties(1, false);
             my_terrain->SetGranularMaterial(particle_radius, 2500, num_layers);
-            my_terrain->SetGhostLayer(ghost_layer);
+            my_terrain->SetGhostLayer(triangle_radius + particle_radius);
             my_terrain->SetSettlingTime(time_settling);
             my_terrain->Settle(use_checkpoint);
 
