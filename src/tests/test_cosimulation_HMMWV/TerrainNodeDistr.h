@@ -80,6 +80,9 @@ class TerrainNodeDistr : public BaseNode {
                              int num_layers   ///< number of generated particle layers (default: 5)
     );
 
+    /// Set size of ghost layer.
+    void SetGhostLayer(double size);
+
     /// Set properties of proxy bodies.
     void SetProxyProperties(double mass,  ///< mass of a proxy body (default: 1)
                             bool fixed    ///< proxies fixed to ground? (default: false)

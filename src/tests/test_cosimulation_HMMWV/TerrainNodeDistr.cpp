@@ -258,8 +258,11 @@ void TerrainNodeDistr::SetGranularMaterial(double radius, double density, int nu
     m_radius_g = radius;
     m_rho_g = density;
     m_num_layers = num_layers;
-    m_system->GetSettings()->collision.collision_envelope = 0.1 * radius;
-    m_system->SetGhostLayer(2 * radius);
+    m_system->GetSettings()->collision.collision_envelope = 0.1 * radius;  
+}
+
+void TerrainNodeDistr::SetGhostLayer(double size) {
+    m_system->SetGhostLayer(size);
 }
 
 void TerrainNodeDistr::UseMaterialProperties(bool flag) {
@@ -937,7 +940,7 @@ void TerrainNodeDistr::DumpProxyData(int which) const {
         i++;
         auto global_id = body->GetGid();
         if (std::find(gids.begin(), gids.end(), global_id) == gids.end()) {
-            continue; // not a proxy body
+            continue;  // not a proxy body
         }
         auto status = m_system->ddm->comm_status[i];
         auto identifier = body->GetIdentifier();
