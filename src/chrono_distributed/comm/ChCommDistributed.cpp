@@ -734,7 +734,14 @@ void ChCommDistributed::PackExchange(BodyExchange* buf, int index) {
     // Material SMC
     buf->mu = data_manager->host_data.mu[index];  // Static Friction
 
-    buf->cohesion = data_manager->host_data.cohesion_data[index];  // Adhesion
+    switch (data_manager->settings.solver.adhesion_force_model) {
+        case ChSystemSMC::Constant:
+            buf->cohesion = data_manager->host_data.cohesion_data[index];  // constant adhesion/cohesion
+            break;
+        case ChSystemSMC::DMT:
+            buf->cohesion = data_manager->host_data.adhesionMultDMT_data[index];  // Derjagin-Muller-Toropov coefficient
+            break;
+    }
 
     if (data_manager->settings.solver.use_material_properties) {
         buf->ym_kn = data_manager->host_data.elastic_moduli[index].x;  // Young's Modulus
@@ -783,7 +790,15 @@ void ChCommDistributed::UnpackExchange(BodyExchange* buf, std::shared_ptr<ChBody
     std::shared_ptr<ChMaterialSurfaceSMC> mat = std::make_shared<ChMaterialSurfaceSMC>();
 
     mat->SetFriction(buf->mu);  // Static Friction
-    mat->SetAdhesion(buf->cohesion);
+
+    switch (data_manager->settings.solver.adhesion_force_model) {
+        case ChSystemSMC::Constant:
+            mat->SetAdhesion(buf->cohesion);  // constant adhesion/cohesion
+            break;
+        case ChSystemSMC::DMT:
+            mat->SetAdhesionMultDMT(buf->cohesion);  // Derjagin-Muller-Toropov coefficient
+            break;
+    }
 
     if (data_manager->settings.solver.use_material_properties) {
         mat->young_modulus = buf->ym_kn;
