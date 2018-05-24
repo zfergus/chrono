@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
 
     size_t num_particles = 0;
     for (int il = 0; il < num_layers; il++) {
-        utils::GridSampler<> sampler(2 * r);
+        utils::PDSampler<> sampler(2 * r);
         auto points = sampler.SampleBox(center, hdims);
         num_particles += points.size();
         cout << " level: " << il << " points: " << points.size() << endl;
