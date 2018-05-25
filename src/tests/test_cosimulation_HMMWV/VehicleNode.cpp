@@ -193,6 +193,7 @@ void VehicleNode::Initialize() {
 
     outf << "System settings" << endl;
     outf << "   Integration step size = " << m_step_size << endl;
+    outf << "   Driver type = " << m_driver_type << endl;
 }
 
 // -----------------------------------------------------------------------------

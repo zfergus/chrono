@@ -487,6 +487,10 @@ void TerrainNodeDistr::Construct() {
         outf << "   particle density = " << m_rho_g << endl;
         outf << "   number layers    = " << m_num_layers << endl;
         outf << "   number particles = " << m_num_particles << endl;
+        outf << "Settling" << endl;
+        outf << "   settling time = " << m_time_settling << endl;
+        outf << "   output? " << (m_settling_output ? "YES" : "NO") << endl;
+        outf << "   output frequency (FPS) = " << m_settling_output_fps << endl;
         outf << "Proxy body properties" << endl;
         outf << "   proxies fixed? " << (m_fixed_proxies ? "YES" : "NO") << endl;
         outf << "   proxy mass = " << m_mass_pF << endl;

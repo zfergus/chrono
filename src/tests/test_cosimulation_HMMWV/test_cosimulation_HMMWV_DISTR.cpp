@@ -46,26 +46,8 @@ using namespace chrono::vehicle;
 
 // =============================================================================
 
-// Tire model
-std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire.json");
-////std::string tire_filename("hmmwv/tire/HMMWV_ANCFTire_Lumped.json");
-////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire.json");
-////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json");
-////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
-
 // Maximum "radius" of a proxy triangle 
 double triangle_radius = 0.026;
-
-// Terrain settling time
-double time_settling = 1;
-
-// Driver type
-//   DATA_DRIVER:  throttle, steering, and braking inputs provided at time points
-//   DEFAULT_DRIVER: zero vehicle inputs (vehicle dropped on granular terrain)
-//   PATH_DRIVER: path follower with (constant target speed)
-VehicleNode::DriverType driver_type = VehicleNode::DATA_DRIVER;
-////VehicleNode::DriverType driver_type = VehicleNode::DEFAULT_DRIVER;
-////VehicleNode::DriverType driver_type = VehicleNode::PATH_DRIVER;
 
 // Enable detailed console print
 bool verbose = false;
@@ -95,7 +77,10 @@ enum {
     OPT_HELP,
     OPT_THREADS_TIRE,
     OPT_THREADS_TERRAIN,
+    OPT_TIRE_MODEL,
+    OPT_MANEUVER,
     OPT_USE_CHECKPOINT,
+    OPT_SETTLING_TIME,
     OPT_SIM_TIME,
     OPT_STEP_SIZE,
     OPT_NO_OUTPUT,
@@ -115,8 +100,10 @@ enum {
 // The last entry must be SO_END_OF_OPTIONS
 CSimpleOptA::SOption g_options[] = {{OPT_THREADS_TIRE, "--num-threads-tire", SO_REQ_CMB},
                                     {OPT_THREADS_TERRAIN, "--num-threads-terrain", SO_REQ_CMB},
-                                    {OPT_USE_CHECKPOINT, "-c", SO_NONE},
+                                    {OPT_TIRE_MODEL, "--tire-model", SO_REQ_CMB},
+                                    {OPT_MANEUVER, "--maneuver", SO_REQ_CMB},
                                     {OPT_USE_CHECKPOINT, "--use-checkpoint", SO_REQ_CMB},
+                                    {OPT_SETTLING_TIME, "--settling-time", SO_REQ_CMB},
                                     {OPT_SIM_TIME, "-t", SO_REQ_CMB},
                                     {OPT_SIM_TIME, "--simulation-time", SO_REQ_CMB},
                                     {OPT_STEP_SIZE, "-s", SO_REQ_CMB},
@@ -127,11 +114,8 @@ CSimpleOptA::SOption g_options[] = {{OPT_THREADS_TIRE, "--num-threads-tire", SO_
                                     {OPT_NUM_LAYERS, "--num-layers", SO_REQ_CMB},
                                     {OPT_PART_RADIUS, "-r", SO_REQ_CMB},
                                     {OPT_PART_RADIUS, "--particle-radius", SO_REQ_CMB},
-                                    {OPT_COHESION, "-ch", SO_REQ_CMB},
                                     {OPT_COHESION, "--cohesion-terrain", SO_REQ_CMB},
-                                    {OPT_INIT_VEL, "-v", SO_REQ_CMB},
                                     {OPT_INIT_VEL, "--initial-fwd-velocity", SO_REQ_CMB},
-                                    {OPT_INIT_OMEGA, "-o", SO_REQ_CMB},
                                     {OPT_INIT_OMEGA, "--initial-wheel-omega", SO_REQ_CMB},
                                     {OPT_SUFFIX, "--suffix", SO_REQ_CMB},
                                     {OPT_HELP, "-?", SO_NONE},
@@ -146,8 +130,11 @@ bool GetProblemSpecs(int argc,
                      int rank,
                      int& nthreads_tire,
                      int& nthreads_terrain,
+                     double& settling_time,
                      double& sim_time,
                      double& step_size,
+                     int& maneuver,
+                     int& tire,
                      int& num_layers,
                      double& particle_radius,
                      double& cohesion,
@@ -184,8 +171,11 @@ int main(int argc, char** argv) {
     // Parse command line arguments
     int nthreads_tire = 2;
     int nthreads_terrain = 2;
+    double settling_time = 1;
     double sim_time = 5;
     double step_size = 4e-5;
+    int imaneuver = 1;
+    int itire = 0;
     int num_layers = 15;
     double particle_radius = 0.012;
     double coh_pressure = 100e3;
@@ -195,11 +185,59 @@ int main(int argc, char** argv) {
     bool output = true;
     bool render = true;
     std::string suffix = "";
-    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, sim_time, step_size, num_layers,
-                         particle_radius, coh_pressure, init_fwd_vel, init_wheel_omega, use_checkpoint, output, render,
-                         suffix)) {
+    if (!GetProblemSpecs(argc, argv, rank, nthreads_tire, nthreads_terrain, settling_time, sim_time, step_size,
+                         imaneuver, itire, num_layers, particle_radius, coh_pressure, init_fwd_vel, init_wheel_omega,
+                         use_checkpoint, output, render, suffix)) {
         MPI_Finalize();
         return 1;
+    }
+
+    // Set tire specification file (relative to the Chrono::Vehicle data directory)
+    std::string tire_filename;
+    switch (itire) {
+        case 0:
+            tire_filename = "hmmwv/tire/HMMWV_ANCFTire.json";
+            break;
+        case 1:
+            tire_filename = "hmmwv/tire/HMMWV_ANCFTire_Lumped.json";
+            break;
+        case 2:
+            tire_filename = "hmmwv/tire/HMMWV_RigidMeshTire.json";
+            break;
+        case 3:
+            tire_filename = "hmmwv/tire/HMMWV_RigidMeshTire_Coarse.json";
+            break;
+    }
+
+    ////std::string tire_filename("hmmwv/tire/HMMWV_RigidMeshTire_Rough.json");
+
+    // Based on specified maneuver, set driver type and terrain dimensions.
+    VehicleNode::DriverType driver_type;
+    double container_length;
+    double container_width;
+    double container_height;
+    std::shared_ptr<ChBezierCurve> path;
+
+    switch (imaneuver) {
+        case 0:
+            driver_type = VehicleNode::DEFAULT_DRIVER;
+            container_length = 5.5;
+            container_width = 3;
+            container_height = 1;
+            break;
+        case 1:
+            driver_type = VehicleNode::DATA_DRIVER;
+            container_length = 10;
+            container_width = 3;
+            container_height = 1;
+            break;
+        case 2:
+            driver_type = VehicleNode::PATH_DRIVER;
+            container_length = 110;
+            container_width = 6;
+            container_height = 1;
+            path = DoubleLaneChangePath(ChVector<>(container_length / 2, -1.5, 0), 20, 3, 20, 40, true);
+            break;
     }
 
     // Prepare output directory.
@@ -216,31 +254,6 @@ int main(int argc, char** argv) {
             cout << "Must use at least 6 nodes" << endl;
         MPI_Finalize();
         return 1;
-    }
-
-    // Terrain dimensions (appropriate for specified driver mode)
-    double container_length;
-    double container_width;
-    double container_height;
-    std::shared_ptr<ChBezierCurve> path;
-
-    switch (driver_type) {
-        case VehicleNode::DEFAULT_DRIVER:
-            container_length = 5.5;
-            container_width = 3;
-            container_height = 1;
-            break;
-        case VehicleNode::DATA_DRIVER:
-            container_length = 10;
-            container_width = 3;
-            container_height = 1;
-            break;
-        case VehicleNode::PATH_DRIVER:
-            container_length = 110;
-            container_width = 6;
-            container_height = 1;
-            path = DoubleLaneChangePath(ChVector<>(container_length / 2, -1.5, 0), 20, 3, 20, 40, true);
-            break;
     }
 
     // Create the systems and run the settling phase for terrain.
@@ -344,7 +357,7 @@ int main(int argc, char** argv) {
             my_terrain->SetProxyProperties(1, false);
             my_terrain->SetGranularMaterial(particle_radius, 2500, num_layers);
             my_terrain->SetGhostLayer(triangle_radius + particle_radius);
-            my_terrain->SetSettlingTime(time_settling);
+            my_terrain->SetSettlingTime(settling_time);
             my_terrain->Settle(use_checkpoint);
 
             my_terrain->SetPath(path);
@@ -491,35 +504,45 @@ int main(int argc, char** argv) {
 // =============================================================================
 
 void ShowUsage() {
-    cout << "Usage:  mpiexec -np 6 test_VEH_HMMWV_Cosimulation [OPTIONS]" << endl;
+    cout << "Usage:  mpiexec -np N test_VEH_HMMWV_Cosimulation [OPTIONS]" << endl;
+    cout << "    (Note that N must be at least 6)" << endl;
     cout << endl;
     cout << " --num-threads-tire=NUM_THREADS_TIRE" << endl;
     cout << "        Specify number of OpenMP threads for the rig node [default: 2]" << endl;
     cout << " --num-threads-terrain=NUM_THREADS_TERRAIN" << endl;
     cout << "        Specify number of OpenMP threads for the terrain node [default: 2]" << endl;
-    cout << " -c" << endl;
     cout << " --use-checkpoint" << endl;
     cout << "        Initialize granular terrain from checkppoint file" << endl;
     cout << "        If not specified, the granular material is settled through simulation" << endl;
+    cout << " --settling-time=STL_TIME" << endl;
+    cout << "        Specify duration for granular terrain settling [default: 1]" << endl;
     cout << " -t=SIM_TIME" << endl;
     cout << " --simulation-time=SIM_TIME" << endl;
-    cout << "        Specify simulation length in seconds [default: 10]" << endl;
+    cout << "        Specify simulation length in seconds [default: 5]" << endl;
     cout << " -s=STEP_SIZE" << endl;
     cout << " --step-size=STEP_SIZE" << endl;
     cout << "        Specify integration step size in seconds [default: 4e-5]" << endl;
+    cout << " --tire-model=TYPE" << endl;
+    cout << "        Specify tire type [default: ANCF]" << endl;
+    cout << "             0: ANCF" << endl;
+    cout << "             1: ANCF_lumped" << endl;
+    cout << "             2: RIGID (fine mesh)" << endl;
+    cout << "             3: RIGID (Coarse mesh)" << endl;
+    cout << " --maneuver=TEST" << endl;
+    cout << "        Specify the particular test to be executed [default: acceleration test]" << endl;
+    cout << "             0: drop test" << endl;
+    cout << "             1: acceleration test" << endl;
+    cout << "             2: double-lane change test" << endl;
     cout << " -n=NUM_LAYERS" << endl;
     cout << " --num-layers=NUM_LAYERS" << endl;
     cout << "        Specify the initial number of particle layers [default: 15]" << endl;
     cout << " -r=RADIUS" << endl;
     cout << " --particle-radius=RADIUS" << endl;
     cout << "        Specify particle radius for granular terrain in m [default: 0.006]" << endl;
-    cout << " -ch=COHESION" << endl;
     cout << " --cohesion-terrain=COHESION" << endl;
     cout << "        Specify the value of the terrain cohesion in Pa [default: 80e3]" << endl;
-    cout << " -v=VELOCITY" << endl;
     cout << " --initial-fwd-velocity=VELOCITY" << endl;
     cout << "        Specify initial chassis forward velocity in m/s [default: 0]" << endl;
-    cout << " -o=OMEGA" << endl;
     cout << " --initial-wheel-omega" << endl;
     cout << "        Specify initial wheel angular velocities in rad/s [default: 0]" << endl;
     cout << " --no-output" << endl;
@@ -538,8 +561,11 @@ bool GetProblemSpecs(int argc,
                      int rank,
                      int& nthreads_tire,
                      int& nthreads_terrain,
+                     double& settling_time,
                      double& sim_time,
                      double& step_size,
+                     int& maneuver,
+                     int& tire,
                      int& num_layers,
                      double& particle_radius,
                      double& cohesion,
@@ -576,11 +602,20 @@ bool GetProblemSpecs(int argc,
             case OPT_THREADS_TERRAIN:
                 nthreads_terrain = std::stoi(args.OptionArg());
                 break;
+            case OPT_SETTLING_TIME:
+                settling_time = std::stod(args.OptionArg());
+                break;
             case OPT_SIM_TIME:
                 sim_time = std::stod(args.OptionArg());
                 break;
             case OPT_STEP_SIZE:
                 step_size = std::stod(args.OptionArg());
+                break;
+            case OPT_TIRE_MODEL:
+                tire = std::stoi(args.OptionArg());
+                break;
+            case OPT_MANEUVER:
+                maneuver = std::stoi(args.OptionArg());
                 break;
             case OPT_NUM_LAYERS:
                 num_layers = std::stoi(args.OptionArg());
