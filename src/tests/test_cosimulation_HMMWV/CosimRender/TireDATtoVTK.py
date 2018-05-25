@@ -98,7 +98,10 @@ def Parse(tire_num,timestep,use_ancf,file_name):
 	outfile.write('\n\n')
 
 	outfile.write('DATASET UNSTRUCTURED_GRID\n')
-	outfile.write('POINTS ' + str(int(num_lines_pos)) + ' float\n')
+	if use_ancf:
+		outfile.write('POINTS ' + str(int(num_lines_pos / 6)) + ' float\n')
+	else:
+		outfile.write('POINTS ' + str(int(num_lines_pos)) + 'float\n')
 
 	i = 0
 	while i < len(pos):
