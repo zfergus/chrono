@@ -353,8 +353,8 @@ void TerrainNodeDistr::Construct() {
     // Enable deactivation of bodies that exit a specified bounding box.
     // We set this bounding box to encapsulate the container with a conservative height.
     m_system->GetSettings()->collision.use_aabb_active = true;
-    m_system->GetSettings()->collision.aabb_min = real3(-m_hdimX, -m_hdimY, 0);
-    m_system->GetSettings()->collision.aabb_max = real3(+m_hdimX, +m_hdimY, 2 * m_hdimZ + 2);
+    m_system->GetSettings()->collision.aabb_min = real3(-m_hdimX - 1, -m_hdimY - 1, -1);
+    m_system->GetSettings()->collision.aabb_max = real3(+m_hdimX + 1, +m_hdimY + 1, 2 * m_hdimZ + 3);
 
     // --------------------------
     // Generate granular material
