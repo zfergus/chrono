@@ -44,7 +44,7 @@ typedef struct BodyExchange {
     float pr_kt;
     float restit_gn;
     float gt;
-	int identifier;
+    int identifier;
 } BodyExchange;
 
 typedef struct BodyUpdate {
@@ -58,10 +58,10 @@ typedef struct BodyUpdate {
 typedef struct Shape {
     uint gid;
     int type;
+    short coll_fam[2];
     double A[3];  // A
     double R[4];
     double data[6];  // B C and shape-specific data
-    /*short2 fam;*/
 } Shape;
 
 /// This class holds functions for processing the system's bodies to determine

@@ -71,15 +71,16 @@ ChCommDistributed::ChCommDistributed(ChSystemDistributed* my_sys) {
     MPI_Type_commit(&BodyUpdateType);
 
     // Shape
-    MPI_Datatype type_shape[3] = {MPI_UNSIGNED, MPI_INT, MPI_DOUBLE};
-    int blocklen_shape[3] = {1, 1, 13};
-    MPI_Aint disp_shape[3];
+    MPI_Datatype type_shape[4] = {MPI_UNSIGNED, MPI_INT, MPI_SHORT, MPI_DOUBLE};
+    int blocklen_shape[4] = {1, 1, 2, 13};
+    MPI_Aint disp_shape[4];
     disp_shape[0] = offsetof(Shape, gid);
     disp_shape[1] = offsetof(Shape, type);
-    disp_shape[2] = offsetof(Shape, A);
+    disp_shape[2] = offsetof(Shape, coll_fam);
+    disp_shape[3] = offsetof(Shape, A);
 
     MPI_Datatype temp_type_s;
-    MPI_Type_create_struct(3, blocklen_shape, disp_shape, type_shape, &temp_type_s);
+    MPI_Type_create_struct(4, blocklen_shape, disp_shape, type_shape, &temp_type_s);
     MPI_Aint lb_s, extent_s;
     MPI_Type_get_extent(temp_type_s, &lb_s, &extent_s);
     MPI_Type_create_resized(temp_type_s, lb_s, extent_s, &ShapeType);
@@ -196,11 +197,9 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
         }
         std::shared_ptr<ChBody> body = (*ddm->data_manager->body_list)[local_id];
 
-        /*
-        short2 fam = (buf + n)->fam;
-        body->GetCollisionModel()->SetFamily(fam.x);
-        body->GetCollisionModel()->SetFamilyMask(fam.y);
-        */
+        body->GetCollisionModel()->SetFamily((buf + n)->coll_fam[0]);
+        body->GetCollisionModel()->SetFamilyMask((buf + n)->coll_fam[1]);
+
         double* rot;
         double* data;
 
@@ -883,9 +882,10 @@ int ChCommDistributed::PackShapes(std::vector<Shape>* buf, int index) {
         shape.R[2] = shape_data.ObR_rigid[shape_index].y;
         shape.R[3] = shape_data.ObR_rigid[shape_index].z;
 
-        /*(buf + i)->fam = shape_data.fam_rigid[shape_index];*/
+        shape.coll_fam[0] = shape_data.fam_rigid[shape_index].x;
+        shape.coll_fam[1] = shape_data.fam_rigid[shape_index].y;
 
-        switch (type) {
+         switch (type) {
             case chrono::collision::SPHERE:
                 shape.data[0] = shape_data.sphere_rigid[start];
                 break;
