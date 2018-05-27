@@ -663,8 +663,10 @@ std::vector<std::pair<uint, ChVector<>>> ChSystemDistributed::GetBodyContactForc
             int contact_index = data_manager->host_data.ct_body_map[local];
             if (contact_index != -1) {
                 real3 f = data_manager->host_data.ct_body_force[contact_index];
-                internal_force cf = {gid, {f[0], f[1], f[2]}};
-                send.push_back(std::move(cf));
+                if (!IsZero(f)) {
+                    internal_force cf = {gid, {f[0], f[1], f[2]}};
+                    send.push_back(std::move(cf));
+                }
             }
         }
     }
