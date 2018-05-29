@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
             container_length = 110;
             container_width = 6;
             container_height = 1;
-            path = DoubleLaneChangePath(ChVector<>(container_length / 2, -1.5, 0), 20, 3, 20, 40, true);
+            path = DoubleLaneChangePath(ChVector<>(-container_length / 2, -1.5, 0), 20, 3, 20, 40, true);
             break;
     }
 
