@@ -197,7 +197,7 @@ void ChCommDistributed::ProcessShapes(int num_recv, Shape* buf) {
         }
         std::shared_ptr<ChBody> body = (*ddm->data_manager->body_list)[local_id];
 
-        body->GetCollisionModel()->SetFamily((buf + n)->coll_fam[0]);
+        body->GetCollisionModel()->SetFamilyGroup((buf + n)->coll_fam[0]);
         body->GetCollisionModel()->SetFamilyMask((buf + n)->coll_fam[1]);
 
         double* rot;
