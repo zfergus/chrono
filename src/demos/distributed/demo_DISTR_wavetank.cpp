@@ -30,24 +30,33 @@ using namespace chrono::collision;
 #define MASTER 0
 
 // ID values to identify command line arguments
-enum { OPT_HELP, OPT_THREADS, OPT_X, OPT_Y, OPT_Z, OPT_TIME, OPT_MONITOR, OPT_OUTPUT_DIR, OPT_VERBOSE };
+enum {
+    OPT_HELP,
+    OPT_THREADS,
+    OPT_X,
+    OPT_Y,
+    OPT_Z,
+    OPT_TIME,
+    OPT_STEP,
+    OPT_AMP,
+    OPT_PER,
+    OPT_MONITOR,
+    OPT_OUTPUT_DIR,
+    OPT_VERBOSE
+};
 
 // Table of CSimpleOpt::Soption structures. Each entry specifies:
 // - the ID for the option (returned from OptionId() during processing)
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},
-                                    {OPT_HELP, "-h", SO_NONE},
-                                    {OPT_THREADS, "-n", SO_REQ_CMB},
-                                    {OPT_X, "-x", SO_REQ_CMB},
-                                    {OPT_Y, "-y", SO_REQ_CMB},
-                                    {OPT_Z, "-z", SO_REQ_CMB},
-                                    {OPT_TIME, "-t", SO_REQ_CMB},
-                                    {OPT_MONITOR, "-m", SO_NONE},
-                                    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},
-                                    SO_END_OF_OPTIONS};
+CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
+                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_X, "-x", SO_REQ_CMB},
+                                    {OPT_Y, "-y", SO_REQ_CMB},       {OPT_Z, "-z", SO_REQ_CMB},
+                                    {OPT_TIME, "-t", SO_REQ_CMB},    {OPT_STEP, "-s", SO_REQ_CMB},
+                                    {OPT_AMP, "-a", SO_REQ_CMB},     {OPT_PER, "-p", SO_REQ_CMB},
+                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
+                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -62,10 +71,11 @@ bool GetProblemSpecs(int argc,
 void ShowUsage();
 
 // Granular Properties
-float Y = 2e6f;  // TODO 2e6f
-float mu = 0.4f;
-float cr = 0.05f;
-double gran_radius = 0.00125;  // 1.25mm radius
+float Y = 2e7f;
+float mu = 0.18f;
+float cr = 0.87f;
+float nu = 0.22f;
+double gran_radius = 0.25;
 double rho = 4000;
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
 double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
@@ -78,15 +88,14 @@ double height = -1.0;
 int split_axis = 1;
 
 // Oscillation
-double period = 1.0;
-double amplitude = spacing * 5.0;
+double period = -1;
+double amplitude = -1;
 size_t low_x_wall;
 size_t high_x_wall;
 
 // Simulation
-double time_step = 1e-5;  // TODO 1e-5
+double time_step = -1;  // TODO 1e-5
 double out_fps = 120;
-unsigned int max_iteration = 100;
 double tolerance = 1e-4;
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
@@ -132,6 +141,7 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
     mat->SetYoungModulus(Y);
     mat->SetFriction(mu);
     mat->SetRestitution(cr);
+    mat->SetPoissonRatio(nu);
 
     auto bin = std::make_shared<ChBody>(std::make_shared<ChCollisionModelParallel>(), ChMaterialSurface::SMC);
     bin->SetMaterialSurface(mat);
@@ -144,21 +154,26 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
 
     auto cb = std::make_shared<ChBoundary>(bin);
     // Floor
-    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, 0), QUNIT), ChVector2<>(2.0 * hx, 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, 0), QUNIT), ChVector2<>(2.0 * (hx + amplitude), 2.0 * (hy + amplitude)));
     // Ceiling
-    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height), Q_from_AngX(CH_C_PI)), ChVector2<>(2.0 * hx, 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(0, 0, height), Q_from_AngX(CH_C_PI)),
+                 ChVector2<>(2.0 * (hx + amplitude), 2.0 * (hy + amplitude)));
 
     // low x
-    cb->AddPlane(ChFrame<>(ChVector<>(-hx, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(-hx, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)),
+                 ChVector2<>(height + 2 * gran_radius, 2.0 * (hy + gran_radius)));
     low_x_wall = 1;
     // high x
-    cb->AddPlane(ChFrame<>(ChVector<>(hx, 0, height / 2.0), Q_from_AngY(-CH_C_PI_2)), ChVector2<>(height, 2.0 * hy));
+    cb->AddPlane(ChFrame<>(ChVector<>(hx, 0, height / 2.0), Q_from_AngY(-CH_C_PI_2)),
+                 ChVector2<>(height + 2 * gran_radius, 2.0 * (hy + 2 * gran_radius)));
     high_x_wall = 2;
 
     // low y
-    cb->AddPlane(ChFrame<>(ChVector<>(0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)), ChVector2<>(2.0 * hx, height));
+    cb->AddPlane(ChFrame<>(ChVector<>(0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)),
+                 ChVector2<>(2.0 * (hx + gran_radius), height + 2 * gran_radius));
     // high y
-    cb->AddPlane(ChFrame<>(ChVector<>(0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)), ChVector2<>(2.0 * hx, height));
+    cb->AddPlane(ChFrame<>(ChVector<>(0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)),
+                 ChVector2<>(2.0 * (hx + gran_radius), height + 2 * gran_radius));
 
     return cb;
 }
@@ -187,12 +202,12 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
 }
 
 size_t AddFallingBalls(ChSystemDistributed* sys) {
-    double lowest = 3.0 * spacing;
+    double lowest = 3.0 * spacing;  // lowest layer is 3 particles above the floor
     ChVector<double> box_center(0, 0, lowest + (height - lowest) / 2.0);
-    ChVector<double> half_dims(hx - spacing, hy - spacing, (height - lowest) / 2.0);
+    ChVector<double> half_dims(hx - spacing, hy - spacing, (height - lowest - spacing) / 2.0);
 
-    utils::GridSampler<> sampler(spacing);
-    // utils::HCPSampler<> sampler(gran_radius * 2.0);
+    // utils::GridSampler<> sampler(spacing);
+    utils::HCPSampler<> sampler(spacing);
 
     auto points = sampler.SampleBox(box_center, half_dims);
 
@@ -200,6 +215,7 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
     ballMat->SetYoungModulus(Y);
     ballMat->SetFriction(mu);
     ballMat->SetRestitution(cr);
+    ballMat->SetPoissonRatio(nu);
     ballMat->SetAdhesion(0);
 
     // Create the falling balls
@@ -288,7 +304,7 @@ int main(int argc, char* argv[]) {
     my_sys.SetParallelThreadNumber(num_threads);
     CHOMPfunctions::SetNumThreads(num_threads);
 
-    my_sys.Set_G_acc(ChVector<double>(0.00001, 0.00001, -9.8));
+    my_sys.Set_G_acc(ChVector<double>(0, 0, -9.8));
 
     // Domain decomposition
     ChVector<double> domlo(-hx - amplitude - spacing, -hy + spacing, -2.0 * spacing);
@@ -300,10 +316,9 @@ int main(int argc, char* argv[]) {
         my_sys.GetDomain()->PrintDomain();
 
     // Set solver parameters
-    my_sys.GetSettings()->solver.max_iteration_bilateral = max_iteration;
     my_sys.GetSettings()->solver.tolerance = tolerance;
 
-    my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hertz;
+    my_sys.GetSettings()->solver.contact_force_model = ChSystemSMC::ContactForceModel::Hooke;
     my_sys.GetSettings()->solver.adhesion_force_model = ChSystemSMC::AdhesionForceModel::Constant;
 
     my_sys.GetSettings()->collision.narrowphase_algorithm = NarrowPhaseType::NARROWPHASE_HYBRID_MPR;
@@ -430,19 +445,31 @@ bool GetProblemSpecs(int argc,
                 break;
 
             case OPT_X:
-                hx = std::stod(args.OptionArg()) / 2.0;
+                hx = gran_radius * std::stoi(args.OptionArg());
                 break;
 
             case OPT_Y:
-                hy = std::stod(args.OptionArg()) / 2.0;
+                hy = gran_radius * std::stod(args.OptionArg());
                 break;
 
             case OPT_Z:
-                height = std::stod(args.OptionArg()) / 2.0;
+                height = 2 * gran_radius * std::stoi(args.OptionArg());
                 break;
 
             case OPT_TIME:
                 time_end = std::stod(args.OptionArg());
+                break;
+
+            case OPT_STEP:
+                time_step = std::stod(args.OptionArg());
+                break;
+
+            case OPT_AMP:
+                amplitude = 2 * gran_radius * std::stod(args.OptionArg());
+                break;
+
+            case OPT_PER:
+                period = std::stod(args.OptionArg());
                 break;
 
             case OPT_MONITOR:
@@ -456,7 +483,8 @@ bool GetProblemSpecs(int argc,
     }
 
     // Check that required parameters were specified
-    if (num_threads == -1 || time_end <= 0 || hx < 0 || hy < 0 || height < 0) {
+    if (num_threads == -1 || time_end <= 0 || hx < 0 || hy < 0 || height < 0 || amplitude < 0 || period <= 0 ||
+        time_step < 0) {
         if (rank == MASTER) {
             std::cout << "Invalid parameter or missing required parameter." << std::endl;
             ShowUsage();
@@ -470,10 +498,13 @@ bool GetProblemSpecs(int argc,
 void ShowUsage() {
     std::cout << "Usage: mpirun -np <num_ranks> ./demo_DISTR_scaling [ARGS]" << std::endl;
     std::cout << "-n=<nthreads>   Number of OpenMP threads on each rank [REQUIRED]" << std::endl;
-    std::cout << "-x=<xsize>      Patch dimension in X direction [REQUIRED]" << std::endl;
-    std::cout << "-y=<ysize>      Patch dimension in Y direction [REQUIRED]" << std::endl;
-    std::cout << "-z=<zsize>      Patch dimension in Z direction [REQUIRED]" << std::endl;
+    std::cout << "-x=<xsize>      Patch dimension in X direction in particle diameters [REQUIRED]" << std::endl;
+    std::cout << "-y=<ysize>      Patch dimension in Y direction in particle diameters [REQUIRED]" << std::endl;
+    std::cout << "-z=<zsize>      Patch dimension in Z direction in particle diameters [REQUIRED]" << std::endl;
+    std::cout << "-a=<amplituded> Amplitude of wavetank oscillation in particle diameters [REQUIRED]" << std::endl;
+    std::cout << "-p=<period>     Period of wavetank oscillation [REQUIRED]" << std::endl;
     std::cout << "-t=<end_time>   Simulation length [REQUIRED]" << std::endl;
+    std::cout << "-s=<step_size>  Time step length [REQUIRED]" << std::endl;
     std::cout << "-o=<outdir>     Output directory (must not exist)" << std::endl;
     std::cout << "-m              Enable performance monitoring (default: false)" << std::endl;
     std::cout << "-v              Enable verbose output (default: false)" << std::endl;
