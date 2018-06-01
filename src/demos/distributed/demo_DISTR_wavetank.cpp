@@ -85,7 +85,7 @@ ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>
 double hx = -1.0;
 double hy = -1.0;
 double height = -1.0;
-int split_axis = 1;
+int split_axis = 0;
 
 // Oscillation
 double period = -1;
@@ -105,7 +105,9 @@ void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
     auto bl_itr = sys->data_manager->body_list->begin();
 
     for (; bl_itr != sys->data_manager->body_list->end(); bl_itr++, i++) {
-        if (sys->ddm->comm_status[i] != chrono::distributed::EMPTY) {
+        auto status = sys->ddm->comm_status[i];
+        if (status == chrono::distributed::OWNED || status == chrono::distributed::SHARED_UP ||
+            status == chrono::distributed::SHARED_DOWN) {
             ChVector<> pos = (*bl_itr)->GetPos();
             ChVector<> vel = (*bl_itr)->GetPos_dt();
 
