@@ -38,6 +38,7 @@ enum {
     OPT_Z,
     OPT_TIME,
     OPT_STEP,
+    OPT_SET,
     OPT_AMP,
     OPT_PER,
     OPT_MONITOR,
@@ -50,13 +51,12 @@ enum {
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
-                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_X, "-x", SO_REQ_CMB},
-                                    {OPT_Y, "-y", SO_REQ_CMB},       {OPT_Z, "-z", SO_REQ_CMB},
-                                    {OPT_TIME, "-t", SO_REQ_CMB},    {OPT_STEP, "-s", SO_REQ_CMB},
-                                    {OPT_AMP, "-a", SO_REQ_CMB},     {OPT_PER, "-p", SO_REQ_CMB},
-                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
-                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
+CSimpleOptA::SOption g_options[] = {
+    {OPT_HELP, "--help", SO_NONE},      {OPT_HELP, "-h", SO_NONE},    {OPT_THREADS, "-n", SO_REQ_CMB},
+    {OPT_X, "-x", SO_REQ_CMB},          {OPT_Y, "-y", SO_REQ_CMB},    {OPT_Z, "-z", SO_REQ_CMB},
+    {OPT_TIME, "-t", SO_REQ_CMB},       {OPT_STEP, "-s", SO_REQ_CMB}, {OPT_SET, "-st", SO_REQ_CMB},
+    {OPT_AMP, "-a", SO_REQ_CMB},        {OPT_PER, "-p", SO_REQ_CMB},  {OPT_MONITOR, "-m", SO_NONE},
+    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB}, {OPT_VERBOSE, "-v", SO_NONE}, SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -88,6 +88,7 @@ double height = -1.0;
 int split_axis = 0;
 
 // Oscillation
+double settling_time = -1;
 double period = -1;
 double amplitude = -1;
 size_t low_x_wall;
@@ -95,7 +96,7 @@ size_t high_x_wall;
 
 // Simulation
 double time_step = -1;  // TODO 1e-5
-double out_fps = 120;
+double out_fps = 60;
 double tolerance = 1e-4;
 
 void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
@@ -107,7 +108,7 @@ void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
     for (; bl_itr != sys->data_manager->body_list->end(); bl_itr++, i++) {
         auto status = sys->ddm->comm_status[i];
         if (status == chrono::distributed::OWNED || status == chrono::distributed::SHARED_UP ||
-            status == chrono::distributed::SHARED_DOWN) {
+            status == chrono::distributed::SHARED_DOWN || status == chrono::distributed::GLOBAL) {
             ChVector<> pos = (*bl_itr)->GetPos();
             ChVector<> vel = (*bl_itr)->GetPos_dt();
 
@@ -204,7 +205,7 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
 }
 
 size_t AddFallingBalls(ChSystemDistributed* sys) {
-    double lowest = 3.0 * spacing;  // lowest layer is 3 particles above the floor
+    double lowest = 1.0 * spacing;  // lowest layer is 3 particles above the floor
     ChVector<double> box_center(0, 0, lowest + (height - lowest) / 2.0);
     ChVector<double> half_dims(hx - spacing, hy - spacing, (height - lowest - spacing) / 2.0);
 
@@ -231,7 +232,9 @@ size_t AddFallingBalls(ChSystemDistributed* sys) {
 }
 
 double GetWallPos(double cur_time) {
-    return amplitude * std::sin(cur_time * 2 * CH_C_PI / period);
+    if (cur_time < settling_time)
+        return 0;
+    return amplitude * std::sin((cur_time - settling_time) * 2 * CH_C_PI / period);
 }
 
 int main(int argc, char* argv[]) {
@@ -466,6 +469,10 @@ bool GetProblemSpecs(int argc,
                 time_step = std::stod(args.OptionArg());
                 break;
 
+            case OPT_SET:
+                settling_time = std::stod(args.OptionArg());
+                break;
+
             case OPT_AMP:
                 amplitude = 2 * gran_radius * std::stod(args.OptionArg());
                 break;
@@ -486,7 +493,7 @@ bool GetProblemSpecs(int argc,
 
     // Check that required parameters were specified
     if (num_threads == -1 || time_end <= 0 || hx < 0 || hy < 0 || height < 0 || amplitude < 0 || period <= 0 ||
-        time_step < 0) {
+        time_step < 0 || settling_time < 0) {
         if (rank == MASTER) {
             std::cout << "Invalid parameter or missing required parameter." << std::endl;
             ShowUsage();
@@ -507,6 +514,7 @@ void ShowUsage() {
     std::cout << "-p=<period>     Period of wavetank oscillation [REQUIRED]" << std::endl;
     std::cout << "-t=<end_time>   Simulation length [REQUIRED]" << std::endl;
     std::cout << "-s=<step_size>  Time step length [REQUIRED]" << std::endl;
+    std::cout << "-st=<settling_time> Time spent settling before oscillation begins [REQUIRED]" << std::endl;
     std::cout << "-o=<outdir>     Output directory (must not exist)" << std::endl;
     std::cout << "-m              Enable performance monitoring (default: false)" << std::endl;
     std::cout << "-v              Enable verbose output (default: false)" << std::endl;
