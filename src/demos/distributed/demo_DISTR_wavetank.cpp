@@ -80,9 +80,9 @@ float cr = 0.87f;
 float nu = 0.22f;
 double gran_radius = -1;
 double rho = 4000;
-double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
-double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
-ChVector<> inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
+double spacing = -1;  // Distance between adjacent centers of particles
+double mass = -1;
+ChVector<> inertia;
 
 // Dimensions
 double hx = -1.0;
@@ -422,7 +422,7 @@ bool GetProblemSpecs(int argc,
     verbose = false;
     monitor = false;
     output_data = false;
-
+    bool rad_set = false;
     // Create the option parser and pass it the program arguments and the array of valid options.
     CSimpleOptA args(argc, argv, g_options);
 
@@ -455,17 +455,36 @@ bool GetProblemSpecs(int argc,
 
             case OPT_RAD:
                 gran_radius = std::stod(args.OptionArg());
+                spacing = 2.001 * gran_radius;
+                mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
+                inertia = (2.0 / 5.0) * mass * gran_radius * gran_radius * ChVector<>(1, 1, 1);
+                rad_set = true;
                 break;
 
             case OPT_X:
+                if (!rad_set) {
+                    if (rank == MASTER)
+                        ShowUsage();
+                    return false;
+                }
                 hx = gran_radius * std::stoi(args.OptionArg());
                 break;
 
             case OPT_Y:
+                if (!rad_set) {
+                    if (rank == MASTER)
+                        ShowUsage();
+                    return false;
+                }
                 hy = gran_radius * std::stod(args.OptionArg());
                 break;
 
             case OPT_Z:
+                if (!rad_set) {
+                    if (rank == MASTER)
+                        ShowUsage();
+                    return false;
+                }
                 height = 2 * gran_radius * std::stoi(args.OptionArg());
                 break;
 
@@ -482,6 +501,11 @@ bool GetProblemSpecs(int argc,
                 break;
 
             case OPT_AMP:
+                if (!rad_set) {
+                    if (rank == MASTER)
+                        ShowUsage();
+                    return false;
+                }
                 amplitude = 2 * gran_radius * std::stod(args.OptionArg());
                 break;
 
@@ -515,7 +539,8 @@ bool GetProblemSpecs(int argc,
 void ShowUsage() {
     std::cout << "Usage: mpirun -np <num_ranks> ./demo_DISTR_scaling [ARGS]" << std::endl;
     std::cout << "-n=<nthreads>   Number of OpenMP threads on each rank [REQUIRED]" << std::endl;
-    std::cout << "-r=<radius>     Particle radius [REQUIRED]" << std::endl;
+    std::cout << "-r=<radius>     Particle radius [REQUIRED] [MUST BE SPECIFIED ALL OTHER LENGTH PARAMETERS]"
+              << std::endl;
     std::cout << "-x=<xsize>      Patch dimension in X direction in particle diameters [REQUIRED]" << std::endl;
     std::cout << "-y=<ysize>      Patch dimension in Y direction in particle diameters [REQUIRED]" << std::endl;
     std::cout << "-z=<zsize>      Patch dimension in Z direction in particle diameters [REQUIRED]" << std::endl;
