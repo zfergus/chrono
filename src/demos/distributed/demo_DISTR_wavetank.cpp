@@ -33,6 +33,7 @@ using namespace chrono::collision;
 enum {
     OPT_HELP,
     OPT_THREADS,
+    OPT_RAD,
     OPT_X,
     OPT_Y,
     OPT_Z,
@@ -51,12 +52,14 @@ enum {
 // - the option as it should appear on the command line
 // - type of the option
 // The last entry must be SO_END_OF_OPTIONS
-CSimpleOptA::SOption g_options[] = {
-    {OPT_HELP, "--help", SO_NONE},      {OPT_HELP, "-h", SO_NONE},    {OPT_THREADS, "-n", SO_REQ_CMB},
-    {OPT_X, "-x", SO_REQ_CMB},          {OPT_Y, "-y", SO_REQ_CMB},    {OPT_Z, "-z", SO_REQ_CMB},
-    {OPT_TIME, "-t", SO_REQ_CMB},       {OPT_STEP, "-s", SO_REQ_CMB}, {OPT_SET, "-st", SO_REQ_CMB},
-    {OPT_AMP, "-a", SO_REQ_CMB},        {OPT_PER, "-p", SO_REQ_CMB},  {OPT_MONITOR, "-m", SO_NONE},
-    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB}, {OPT_VERBOSE, "-v", SO_NONE}, SO_END_OF_OPTIONS};
+CSimpleOptA::SOption g_options[] = {{OPT_HELP, "--help", SO_NONE},   {OPT_HELP, "-h", SO_NONE},
+                                    {OPT_THREADS, "-n", SO_REQ_CMB}, {OPT_RAD, "-r", SO_REQ_CMB},
+                                    {OPT_X, "-x", SO_REQ_CMB},       {OPT_Y, "-y", SO_REQ_CMB},
+                                    {OPT_Z, "-z", SO_REQ_CMB},       {OPT_TIME, "-t", SO_REQ_CMB},
+                                    {OPT_STEP, "-s", SO_REQ_CMB},    {OPT_SET, "-st", SO_REQ_CMB},
+                                    {OPT_AMP, "-a", SO_REQ_CMB},     {OPT_PER, "-p", SO_REQ_CMB},
+                                    {OPT_MONITOR, "-m", SO_NONE},    {OPT_OUTPUT_DIR, "-o", SO_REQ_CMB},
+                                    {OPT_VERBOSE, "-v", SO_NONE},    SO_END_OF_OPTIONS};
 
 bool GetProblemSpecs(int argc,
                      char** argv,
@@ -75,7 +78,7 @@ float Y = 2e7f;
 float mu = 0.18f;
 float cr = 0.87f;
 float nu = 0.22f;
-double gran_radius = 0.25;
+double gran_radius = -1;
 double rho = 4000;
 double spacing = 2.001 * gran_radius;  // Distance between adjacent centers of particles
 double mass = rho * 4.0 / 3.0 * CH_C_PI * gran_radius * gran_radius * gran_radius;
@@ -95,7 +98,7 @@ size_t low_x_wall;
 size_t high_x_wall;
 
 // Simulation
-double time_step = -1;  // TODO 1e-5
+double time_step = -1;
 double out_fps = 60;
 double tolerance = 1e-4;
 
@@ -164,19 +167,19 @@ std::shared_ptr<ChBoundary> AddContainer(ChSystemDistributed* sys) {
 
     // low x
     cb->AddPlane(ChFrame<>(ChVector<>(-hx, 0, height / 2.0), Q_from_AngY(CH_C_PI_2)),
-                 ChVector2<>(height + 2 * gran_radius, 2.0 * (hy + gran_radius)));
+                 ChVector2<>(height + 2 * spacing, 2.0 * (hy + spacing)));
     low_x_wall = 1;
     // high x
     cb->AddPlane(ChFrame<>(ChVector<>(hx, 0, height / 2.0), Q_from_AngY(-CH_C_PI_2)),
-                 ChVector2<>(height + 2 * gran_radius, 2.0 * (hy + 2 * gran_radius)));
+                 ChVector2<>(height + 2 * spacing, 2.0 * (hy + 2 * spacing)));
     high_x_wall = 2;
 
     // low y
     cb->AddPlane(ChFrame<>(ChVector<>(0, -hy, height / 2.0), Q_from_AngX(-CH_C_PI_2)),
-                 ChVector2<>(2.0 * (hx + gran_radius), height + 2 * gran_radius));
+                 ChVector2<>(2.0 * (hx + spacing), height + 2 * spacing));
     // high y
     cb->AddPlane(ChFrame<>(ChVector<>(0, hy, height / 2.0), Q_from_AngX(CH_C_PI_2)),
-                 ChVector2<>(2.0 * (hx + gran_radius), height + 2 * gran_radius));
+                 ChVector2<>(2.0 * (hx + spacing), height + 2 * spacing));
 
     return cb;
 }
@@ -288,6 +291,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (verbose && my_rank == MASTER) {
+        std::cout << "Particle radius:            " << gran_radius << std::endl;
         std::cout << "Number of threads:          " << num_threads << std::endl;
         std::cout << "Domain:                     " << 2 * hx << " x " << 2 * hy << " x " << 2 * height << std::endl;
         std::cout << "Simulation length:          " << time_end << std::endl;
@@ -449,6 +453,10 @@ bool GetProblemSpecs(int argc,
                 outdir = args.OptionArg();
                 break;
 
+            case OPT_RAD:
+                gran_radius = std::stod(args.OptionArg());
+                break;
+
             case OPT_X:
                 hx = gran_radius * std::stoi(args.OptionArg());
                 break;
@@ -493,7 +501,7 @@ bool GetProblemSpecs(int argc,
 
     // Check that required parameters were specified
     if (num_threads == -1 || time_end <= 0 || hx < 0 || hy < 0 || height < 0 || amplitude < 0 || period <= 0 ||
-        time_step < 0 || settling_time < 0) {
+        time_step < 0 || settling_time < 0 || gran_radius < 0) {
         if (rank == MASTER) {
             std::cout << "Invalid parameter or missing required parameter." << std::endl;
             ShowUsage();
@@ -507,6 +515,7 @@ bool GetProblemSpecs(int argc,
 void ShowUsage() {
     std::cout << "Usage: mpirun -np <num_ranks> ./demo_DISTR_scaling [ARGS]" << std::endl;
     std::cout << "-n=<nthreads>   Number of OpenMP threads on each rank [REQUIRED]" << std::endl;
+    std::cout << "-r=<radius>     Particle radius [REQUIRED]" << std::endl;
     std::cout << "-x=<xsize>      Patch dimension in X direction in particle diameters [REQUIRED]" << std::endl;
     std::cout << "-y=<ysize>      Patch dimension in Y direction in particle diameters [REQUIRED]" << std::endl;
     std::cout << "-z=<zsize>      Patch dimension in Z direction in particle diameters [REQUIRED]" << std::endl;
