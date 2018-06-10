@@ -16,6 +16,7 @@ set(TESTS
     test_DISTR_setstate
     test_DISTR_getforces
     test_DISTR_addbody
+    test_DISTR_scaling
 )
 
 set(TESTS_OPENGL
@@ -41,7 +42,7 @@ set(LIBRARIES
 )
 
 if(ENABLE_MODULE_OPENGL)
-    set(TESTS ${TESTS} ${TESTS_OPENGL})
+    set(ALL_TESTS ${TESTS} ${TESTS_OPENGL})
     include_directories(${CH_OPENGL_INCLUDES})
     set(LIBRARIES ${LIBRARIES} ChronoEngine_opengl)
 endif()
@@ -52,7 +53,7 @@ endif()
 
 message(STATUS "Test programs for DISTRIBUTED module...")
 
-foreach(PROGRAM ${TESTS})
+foreach(PROGRAM ${ALL_TESTS})
     message(STATUS "...add ${PROGRAM}")
 
     add_executable(${PROGRAM}  "${PROGRAM}.cpp")
