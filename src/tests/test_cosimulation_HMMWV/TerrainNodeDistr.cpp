@@ -29,6 +29,8 @@
 #include "chrono/core/ChFileutils.h"
 #include "chrono/geometry/ChLineBezier.h"
 
+#include "chrono_parallel/solver/ChIterativeSolverParallel.h"
+
 #ifdef CHRONO_OPENGL
 #include "chrono_opengl/ChOpenGLWindow.h"
 #endif
@@ -92,6 +94,26 @@ MPI_Comm GetTerrainIntracommunicator() {
 }  // end namespace cosim
 
 // -----------------------------------------------------------------------------
+// Utility function for monitoring Chrono::Parallel performance
+// -----------------------------------------------------------------------------
+void Monitor(chrono::ChSystemParallel* system, int rank) {
+    double TIME = system->GetChTime();
+    double STEP = system->GetTimerStep();
+    double BROD = system->GetTimerCollisionBroad();
+    double NARR = system->GetTimerCollisionNarrow();
+    double SOLVER = system->GetTimerSolver();
+    double UPDT = system->GetTimerUpdate();
+    double EXCH = system->data_manager->system_timer.GetTime("Exchange");
+    int BODS = system->GetNbodies();
+    int CNTC = system->GetNcontacts();
+    double RESID = std::static_pointer_cast<chrono::ChIterativeSolverParallel>(system->GetSolver())->GetResidual();
+    int ITER = std::static_pointer_cast<chrono::ChIterativeSolverParallel>(system->GetSolver())->GetTotalIterations();
+
+    printf("%d|   %8.5f | %7.4f | E%7.4f | B%7.4f | N%7.4f | %7.4f | %7.4f | %7d | %7d | %7d | %7.4f\n",  ////
+           rank, TIME, STEP, EXCH, BROD, NARR, SOLVER, UPDT, BODS, CNTC, ITER, RESID);
+}
+
+// -----------------------------------------------------------------------------
 // Construction of the terrain node:
 // - create the (distributed) Chrono system and set solver parameters
 // - create the OpenGL visualization window
@@ -102,6 +124,7 @@ TerrainNodeDistr::TerrainNodeDistr(MPI_Comm terrain_comm, int num_tires, bool re
       m_render(render),
       m_constructed(false),
       m_settling_output(false),
+      m_settling_monitor(false),
       m_initial_output(false),
       m_num_particles(0),
       m_particles_start_index(0),
@@ -490,6 +513,7 @@ void TerrainNodeDistr::Construct() {
         outf << "Settling" << endl;
         outf << "   settling time = " << m_time_settling << endl;
         outf << "   output? " << (m_settling_output ? "YES" : "NO") << endl;
+        outf << "   monitor? " << (m_settling_monitor ? "YES" : "NO") << endl;
         outf << "   output frequency (FPS) = " << m_settling_output_fps << endl;
         outf << "Proxy body properties" << endl;
         outf << "   proxies fixed? " << (m_fixed_proxies ? "YES" : "NO") << endl;
@@ -594,6 +618,11 @@ void TerrainNodeDistr::Settle(bool use_checkpoint) {
 
             if (OnMaster() && is % output_steps == 0) {
                 cout << std::fixed << m_system->GetChTime() << "  [" << m_timer.GetTimeSeconds() << "]" << std::endl;
+            }
+
+            // Monitor (if enabled)
+            if (OnMaster() && m_settling_monitor) {
+                Monitor(m_system, m_system->GetCommRank());
             }
 
             // Output (if enabled)

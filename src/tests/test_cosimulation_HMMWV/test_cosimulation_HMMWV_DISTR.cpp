@@ -57,6 +57,7 @@ bool initial_output = false;
 
 // Output during settling phase
 bool settling_output = true;
+bool settling_monitor = false;
 
 // Output frequency (frames per second)
 double output_fps = 60;
@@ -353,6 +354,7 @@ int main(int argc, char** argv) {
 
             my_terrain->EnableInitialOutput(initial_output);
             my_terrain->EnableSettlingOutput(settling_output, output_fps);
+            my_terrain->EnableSettlingMonitor(settling_monitor);
 
             my_terrain->SetProxyProperties(1, false);
             my_terrain->SetGranularMaterial(particle_radius, 2500, num_layers);

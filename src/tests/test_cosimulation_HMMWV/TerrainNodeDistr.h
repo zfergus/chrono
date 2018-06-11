@@ -110,6 +110,9 @@ class TerrainNodeDistr : public BaseNode {
         m_settling_output_fps = fps;
     }
 
+    /// Enable/disable display of performance metrics during settling (default: false).
+    void EnableSettlingMonitor(bool val) { m_settling_monitor = val; }
+
     /// Enable/disable output of initial body information (default: false).
     /// Output includes body information after granular material creation (files init_particles_xxx.dat)
     /// and body information after proxy creation (files init_bodies_xxx.dat) on all terrain ranks.
@@ -189,6 +192,7 @@ class TerrainNodeDistr : public BaseNode {
 
     double m_time_settling;        ///< simulation length for settling of granular material
     bool m_settling_output;        ///< generate output files during settling?
+    bool m_settling_monitor;       ///< display solver performance metrics during settling? 
     double m_settling_output_fps;  ///< output frequency during settling
     bool m_initial_output;         ///< generate output files with initial particle information?
 
