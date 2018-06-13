@@ -73,6 +73,10 @@ bool GetProblemSpecs(int argc,
 
 void ShowUsage();
 
+int num_ranks;
+int my_rank;
+std::string outdir;
+
 // Granular Properties
 float Y = 2e7f;
 float mu = 0.18f;
@@ -102,25 +106,30 @@ double time_step = -1;
 double out_fps = 60;
 double tolerance = 1e-4;
 
-void WriteCSV(std::ofstream* file, int timestep_i, ChSystemDistributed* sys) {
+// TODO: binary output
+void WriteCSV(ChSystemDistributed& m_sys, size_t frame) {
     std::stringstream ss_particles;
+    ss_particles << "x,y,z,U\n" << std::flush;
 
     int i = 0;
-    auto bl_itr = sys->data_manager->body_list->begin();
-
-    for (; bl_itr != sys->data_manager->body_list->end(); bl_itr++, i++) {
-        auto status = sys->ddm->comm_status[i];
+    for (auto bl_itr = m_sys.data_manager->body_list->begin(); bl_itr != m_sys.data_manager->body_list->end();
+         bl_itr++, i++) {
+        auto status = m_sys.ddm->comm_status[i];
         if (status == chrono::distributed::OWNED || status == chrono::distributed::SHARED_UP ||
-            status == chrono::distributed::SHARED_DOWN || status == chrono::distributed::GLOBAL) {
+            status == chrono::distributed::SHARED_DOWN) {
             ChVector<> pos = (*bl_itr)->GetPos();
             ChVector<> vel = (*bl_itr)->GetPos_dt();
 
-            ss_particles << timestep_i << "," << (*bl_itr)->GetGid() << "," << pos.x() << "," << pos.y() << ","
-                         << pos.z() << "," << vel.Length() << std::endl;
+            ss_particles << pos.x() << "," << pos.y() << "," << pos.z() << "," << vel.Length() << std::endl;
         }
     }
+    std::stringstream ss_outfile_name;
+    ss_outfile_name << outdir << "/Rank" << my_rank << "T" << frame << ".csv";
 
-    *file << ss_particles.str();
+    std::ofstream file;
+    file.open(ss_outfile_name.str());
+    file << ss_particles.str();
+    file.close();
 }
 
 void Monitor(chrono::ChSystemParallel* system, int rank) {
@@ -207,6 +216,7 @@ inline std::shared_ptr<ChBody> CreateBall(const ChVector<>& pos,
     return ball;
 }
 
+// TODO: Not HCP?
 size_t AddFallingBalls(ChSystemDistributed* sys) {
     double lowest = 1.0 * spacing;  // lowest layer is 3 particles above the floor
     ChVector<double> box_center(0, 0, lowest + (height - lowest) / 2.0);
@@ -241,8 +251,6 @@ double GetWallPos(double cur_time) {
 }
 
 int main(int argc, char* argv[]) {
-    int num_ranks;
-    int my_rank;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
@@ -250,7 +258,6 @@ int main(int argc, char* argv[]) {
     // Parse program arguments
     int num_threads;
     double time_end;
-    std::string outdir;
     bool verbose;
     bool monitor;
     bool output_data;
@@ -316,7 +323,7 @@ int main(int argc, char* argv[]) {
     my_sys.Set_G_acc(ChVector<double>(0, 0, -9.8));
 
     // Domain decomposition
-    ChVector<double> domlo(-hx - amplitude - spacing, -hy + spacing, -2.0 * spacing);
+    ChVector<double> domlo(-hx - amplitude - spacing, -hy - spacing, -2.0 * spacing);
     ChVector<double> domhi(hx + amplitude + spacing, hy + spacing, height + 3.0 * spacing);
     my_sys.GetDomain()->SetSplitAxis(split_axis);  // Split along the y-axis
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
@@ -359,11 +366,6 @@ int main(int argc, char* argv[]) {
 
     // Once the directory has been created, all ranks can make their output files
     MPI_Barrier(my_sys.GetCommunicator());
-    std::string out_file_name = outdir + "/Rank" + std::to_string(my_rank) + ".csv";
-    outfile.open(out_file_name);
-    outfile << "t,gid,x,y,z,U\n" << std::flush;
-    if (verbose)
-        std::cout << "Rank: " << my_rank << "  Output file name: " << out_file_name << std::endl;
 
     // Run simulation for specified time
     int num_steps = (int)std::ceil(time_end / time_step);
@@ -383,7 +385,7 @@ int main(int argc, char* argv[]) {
             if (my_rank == MASTER)
                 std::cout << "Time: " << time << "    elapsed: " << MPI_Wtime() - t_start << std::endl;
             if (output_data) {
-                WriteCSV(&outfile, out_frame, &my_sys);
+                WriteCSV(my_sys, out_frame);
                 out_frame++;
             }
         }
@@ -399,9 +401,6 @@ int main(int argc, char* argv[]) {
 
     if (my_rank == MASTER)
         std::cout << "\n\nTotal elapsed time = " << elapsed << std::endl;
-
-    if (output_data)
-        outfile.close();
 
     MPI_Finalize();
     return 0;
