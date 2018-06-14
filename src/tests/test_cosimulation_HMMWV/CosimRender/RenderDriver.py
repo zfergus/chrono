@@ -2,7 +2,7 @@
 # usage: python TerrainDATtoVTK.py <timestep> <list of files for this frame...>
 
 # usage: python RenderDriver.py <num_tires> <ancf_flag> <list of tire directories...>
-#       <num_terrain_ranks> <terrain directory> <num_timesteps> <settle_flag>
+#       <num_terrain_ranks> <terrain directory> <end_timestep> <settle_flag>
 
 import sys
 import TerrainDATtoVTK as TerrainRender
@@ -10,7 +10,7 @@ import TireDATtoVTK as TireRender
 
 if len(sys.argv) < 7:
 	print('''usage: python RenderDriver.py <num_tires> <ancf_flag> <list of tire directories...>
-	       <num_terrain_ranks> <terrain directory> <num_timesteps> <settling_flag> <num_settling_frames>''')
+	       <num_terrain_ranks> <terrain directory> <start_timestep> <end_timestep> <settling_flag> <num_settling_frames>''')
 	exit(1)
 
 arg = 1
@@ -36,13 +36,18 @@ for i in range(len(tire_dirs)):
 	if tire_dirs[i][-1] != '/':
 		tire_dirs[i] = tire_dirs[i] + '/'
 
-num_timesteps = int(sys.argv[arg])
+start_timestep = int(sys.argv[arg])
+arg = arg +1
+
+end_timestep = int(sys.argv[arg])
 arg = arg + 1
 
 settle = bool(int(sys.argv[arg]))
 arg = arg + 1
 if settle:
 	num_settle_steps = int(sys.argv[arg])
+	arg = arg + 1
+
 
 # Debug args
 print('num_tires ' + str(num_tires))
@@ -50,9 +55,10 @@ print('use_ancf ' + str(use_ancf))
 print('tire_dirs ' + str(tire_dirs))
 print('num_terrain_ranks ' + str(num_terrain_ranks))
 print('terrain_dir ' + str(terrain_dir))
-print('num_timesteps ' + str(num_timesteps))
+print('end_timestep ' + str(end_timestep))
 print('settle ' + str(settle))
 print('num_settle_steps ' + str(num_settle_steps))
+print('start_timestep ' + str(start_timestep))
 
 
 # Render settling
@@ -73,7 +79,7 @@ if settle:
 # Render Main Simulation
 # For each frame
 print('Main')
-for step in range(1,num_timesteps + 1):
+for step in range(start_timestep, end_timestep):
 	step = str(step).zfill(4)
 	print('step ' + str(step))
 
