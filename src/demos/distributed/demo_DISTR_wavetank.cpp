@@ -92,7 +92,7 @@ ChVector<> inertia;
 double hx = -1.0;
 double hy = -1.0;
 double height = -1.0;
-int split_axis = 0;
+int split_axis = 1;  // Split in y axis
 
 // Oscillation
 double settling_time = -1;
@@ -309,7 +309,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Create distributed system
-    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2.0, 1000000);  // TODO
+    ChSystemDistributed my_sys(MPI_COMM_WORLD, gran_radius * 2.0, 3000000);
 
     if (verbose) {
         if (my_rank == MASTER)
@@ -325,7 +325,7 @@ int main(int argc, char* argv[]) {
     // Domain decomposition
     ChVector<double> domlo(-hx - amplitude - spacing, -hy - spacing, -2.0 * spacing);
     ChVector<double> domhi(hx + amplitude + spacing, hy + spacing, height + 3.0 * spacing);
-    my_sys.GetDomain()->SetSplitAxis(split_axis);  // Split along the y-axis
+    my_sys.GetDomain()->SetSplitAxis(split_axis);
     my_sys.GetDomain()->SetSimDomain(domlo.x(), domhi.x(), domlo.y(), domhi.y(), domlo.z(), domhi.z());
 
     if (verbose)
@@ -341,7 +341,7 @@ int main(int argc, char* argv[]) {
 
     int binX;
     int binY;
-    int binZ = 1;
+    int binZ;
     int factor = 4;
     ChVector<> subhi = my_sys.GetDomain()->GetSubHi();
     ChVector<> sublo = my_sys.GetDomain()->GetSubLo();
@@ -353,6 +353,11 @@ int main(int argc, char* argv[]) {
     binY = (int)std::ceil(subsize.y()) / factor;
     if (binY == 0)
         binY = 1;
+
+    // Acounts for the amount of filling for the desired setup
+    binZ = (int)std::ceil(subsize.z()) * 0.75 / factor;
+    if (binZ == 0)
+        binZ = 1;
 
     my_sys.GetSettings()->collision.bins_per_axis = vec3(binX, binY, binZ);
     if (verbose)
