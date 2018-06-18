@@ -7,8 +7,8 @@
 
 %import "ChMatrix.i"
 
-// Hack to avoid problems with .x() .y() .z() that work with references. 
-// This is not straightforward in SWIG. So access them as .x .y .z attributes 
+// Hack to avoid problems with .x() .y() .z() that work with references.
+// This is not straightforward in SWIG. So access them as .x .y .z attributes
 // using the following workaround (NOTE! must happen before calling %include)
 %include <attribute.i>
 %attributeref(chrono::ChVector<double>, double, x);
@@ -21,11 +21,11 @@
 %ignore chrono::ChVector::eigen;
 
 /* Parse the header file to generate wrappers */
-%include "../chrono/core/ChVector.h"  
+%include "../chrono/core/ChVector.h"
 
 
-%template(ChVectorD) chrono::ChVector<double>; 
-%template(ChVectorF) chrono::ChVector<float>; 
+%template(ChVectorD) chrono::ChVector<double>;
+%template(ChVectorF) chrono::ChVector<float>;
 
 // This is needed because a std::vector<ChVector<double>
 // might be used  somewhere, and we want to use it via python:
@@ -41,15 +41,24 @@
 %extend chrono::ChVector<double>{
 		public:
 					// Add function to support python 'print(...)'
-			char *__str__() 
+			char* __str__()
 					{
 						static char temp[256];
-						sprintf(temp,"[ %g, %g, %g ]", $self->x(),$self->y(),$self->z());
+						sprintf(temp, "[%g, %g, %g]",
+							$self->x(), $self->y(), $self->z());
 						return &temp[0];
 					}
-					// operator  ^  as ^ in c++ 
-			double __xor__(const ChVector<double>& other) const 
-					{ 
+					// Add function to support python 'repr(...)'
+			char* __repr__()
+					{
+						static char temp[256];
+						sprintf(temp, "ChVectorD(%g, %g, %g)",
+							$self->x(), $self->y(), $self->z());
+						return &temp[0];
+					}
+					// operator  ^  as ^ in c++
+			double __xor__(const ChVector<double>& other) const
+					{
 						return $self->operator^(other);
 					}
 		};
