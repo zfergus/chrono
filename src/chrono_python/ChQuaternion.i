@@ -4,15 +4,15 @@
 #include "chrono/core/ChQuaternion.h"
 #include <Eigen/Core>
 %}
- 
+
  %import "ChMatrix.i"
 
 // Undefine ChApi otherwise SWIG gives a syntax error
-#define ChApi  
+#define ChApi
 
 
-// Hack to avoid problems with .e0() .e1() .e2() .e3 that work with references. 
-// This is not straightforward in SWIG. So access them as .e0 .e1 .e2 .e3 attributes 
+// Hack to avoid problems with .e0() .e1() .e2() .e3 that work with references.
+// This is not straightforward in SWIG. So access them as .e0 .e1 .e2 .e3 attributes
 // using the following workaround (NOTE! must happen before calling %include)
 %include <attribute.i>
 %attributeref(chrono::ChQuaternion<double>, double, e0);
@@ -29,31 +29,39 @@
 %ignore chrono::ChQuaternion::eigen;
 
 /* Parse the header file to generate wrappers */
-%include "../chrono/core/ChQuaternion.h"  
+%include "../chrono/core/ChQuaternion.h"
 
 
-%template(ChQuaternionD) chrono::ChQuaternion<double>; 
-//%template(ChQuaternionF) chrono::ChQuaternion<float>; 
+%template(ChQuaternionD) chrono::ChQuaternion<double>;
+//%template(ChQuaternionF) chrono::ChQuaternion<float>;
 
 
 
 %extend chrono::ChQuaternion<double>{
 		public:
 					// Add function to support python 'print(...)'
-			char *__str__() 
+			char *__str__()
 					{
 						static char temp[256];
 						sprintf(temp,"[ %g, %g, %g, %g ]", $self->e0(),$self->e1(),$self->e2(),$self->e3());
 						return &temp[0];
 					}
-					// operator  ~  as ! in c++ 
-			ChQuaternion<double> __invert__() const  
+					// Add function to support python 'repr(...)'
+			char *__repr__()
+					{
+						static char temp[256];
+						sprintf(temp,"ChQuaternionD(%g, %g, %g, %g)",
+                            $self->e0(),$self->e1(),$self->e2(),$self->e3());
+						return &temp[0];
+					}
+					// operator  ~  as ! in c++
+			ChQuaternion<double> __invert__() const
 					{
 						return $self->operator!();
 					}
-					// operator  ^  as ^ in c++ 
-			double __xor__(const ChQuaternion<double>& other) const 
-					{ 
+					// operator  ^  as ^ in c++
+			double __xor__(const ChQuaternion<double>& other) const
+					{
 						return $self->operator^(other);
 					}
 		};
