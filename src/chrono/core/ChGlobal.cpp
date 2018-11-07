@@ -77,9 +77,9 @@ int GetUniqueIntID() {
 // -----------------------------------------------------------------------------
 // Functions for manipulating the Chrono data directory
 // -----------------------------------------------------------------------------
-
+// static std::string chrono_data_path(std::string("../data/"));
 static std::string chrono_data_path(
-    std::string(std::getenv("CHRONODIR")) + std::string("/data/"));
+    std::getenv("CHRONODIR") ? (std::string("CHRONODIR") + std::string("/data/")):std::string("../data/"));
 
 // Set the path to the Chrono data directory (ATTENTION: not thread safe)
 void SetChronoDataPath(const std::string& path) {
